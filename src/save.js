@@ -29,6 +29,14 @@ export function prepareSave(image, model, pick, when = new Date()) {
   for (const region of fixed) {
     if (!after[region].ok) throw new SaveError(`The ${region} checksum did not verify after correction. Nothing was saved.`);
   }
+  // An edit can break a checksum without touching its summed ranges (for example
+  // its range header). Any region that verified in the loaded file but fails now,
+  // and was not corrected, is reported as not fixed.
+  if (plugin) {
+    for (const [region, r] of Object.entries(after)) {
+      if (before[region].ok && !r.ok && !fixed.includes(region) && !notFixed.includes(region)) notFixed.push(region);
+    }
+  }
   const allowed = new Set(edited);
   for (const region of fixed) for (const o of plugin.storedAt(out, region)) allowed.add(o);
   for (let i = 0; i < out.length; i++) {
@@ -98,7 +106,7 @@ function changeLog(image, model, res, when) {
       `  loaded file: ${fmtChecks(res.before)}`,
       `  saved file:  ${fmtChecks(res.after)}`,
       `  corrected: ${res.fixed.join(', ') || 'none needed'}`);
-    if (res.notFixed.length) L.push(`  NOT corrected: ${res.notFixed.join(', ')} (edits fall in a region this tool never corrects)`);
+    if (res.notFixed.length) L.push(`  NOT corrected: ${res.notFixed.join(', ')} (edited bytes affect a checksum this tool does not correct)`);
   } else {
     L.push('Checksums: no checksum plugin for this file, so nothing was corrected');
   }

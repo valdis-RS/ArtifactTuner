@@ -95,3 +95,15 @@ test('planChecksums and changedItems', () => {
   assert.deepEqual(ch.map(c => c.item.title), ['Ignition - base advance']);
   assert.ok(ch[0].cells >= 1 && ch[0].cells <= 3);
 });
+
+test('an edit that breaks a checksum it could not correct is marked not fixed', () => {
+  const im = new BinImage(readBin(P.ekii), 'EKII.bin');
+  im.apply('cal range header', [{ off: 0x77fe4, before: im.working[0x77fe4], after: im.working[0x77fe4] ^ 1 }]);
+  const res = prepareSave(im, ems, pickPlugin(im.original));
+  assert.deepEqual(res.fixed, []);
+  assert.deepEqual(res.notFixed, ['cal']);
+  assert.equal(res.after.cal.ok, false);
+  assert.equal(res.notCorrected, true);
+  assert.equal(res.binName, 'EKII_edit_CHECKSUM-NOT-FIXED.bin');
+  assert.match(res.changeLog, /NOT corrected: cal \(edited bytes affect a checksum this tool does not correct\)/);
+});
