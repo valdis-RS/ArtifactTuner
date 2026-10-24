@@ -40,6 +40,9 @@ export function planWrites(item, img, cells, { raw = false } = {}) {
   const bytes = new Map();                  // offset -> new byte; a later write to the same cell wins
   const clamped = [];
   for (const { r, c, value } of cells) {
+    if (!Number.isInteger(r) || !Number.isInteger(c) || r < 0 || c < 0 || r >= z.rows || c >= z.cols) {
+      throw new RangeError(`Cell (${r}, ${c}) is outside ${item.title} (${z.rows} × ${z.cols})`);
+    }
     const res = raw ? rawResult(z, lo, hi, value) : z.conv.toRaw(value);
     if (res.clamped) clamped.push({ r, c, value, stored: raw ? res.raw : z.conv.f(res.raw) });
     const off = cellOffset(z, r, c);

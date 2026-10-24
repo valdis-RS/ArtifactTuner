@@ -64,6 +64,16 @@ test('read-only and disabled items refuse writes', () => {
   assert.throws(() => planWrites({ ...ign, disabled: true, disabledReason: 'y' }, ekii, []), /disabled/);
 });
 
+test('cells outside the table are refused', () => {
+  const ign = itemAt(0x75ef2);
+  for (const cell of [{ r: 16, c: 0 }, { r: 0, c: 12 }, { r: -1, c: 0 }, { r: 1.5, c: 0 }]) {
+    assert.throws(() => planWrites(ign, ekii, [{ ...cell, value: 10 }]), /outside/, JSON.stringify(cell));
+  }
+  assert.throws(() => planWrites(ign, ekii, [{ r: 16, c: 0, value: 10 }]),
+    /Cell \(16, 0\) is outside Ignition - base advance \(16 × 12\)/);
+  assert.doesNotThrow(() => planWrites(ign, ekii, [{ r: 15, c: 11, value: 10 }]));   // the last cell is inside
+});
+
 test('steps, axes and formatting', () => {
   const ign = itemAt(0x75ef2);
   assert.equal(defaultStep(ign), 0.375);
