@@ -1,0 +1,8 @@
+.DS_Store
+node_modules/
+dist/
+tests/fixtures/*.json
+*.bin
+*.xdf
+*.ori
+.claude/
