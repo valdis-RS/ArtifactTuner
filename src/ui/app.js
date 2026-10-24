@@ -2,7 +2,7 @@
 // undo/redo, saving, and the window.xdfedit test hook.
 import { parseXdf, checkBounds } from '../xdf.js';
 import { BinImage } from '../image.js';
-import { readItem, planWrites, formatValue, formatAxis, defaultStep } from '../table.js';
+import { readItem, planWrites, formatValue, formatAxis, defaultStep, copyText } from '../table.js';
 import { normSel, opSet, opAdd, opScale, opInterpolate, opSmooth, opRevert, opPaste, toTsv, parseNumber } from '../ops.js';
 import { pickPlugin } from '../checksums/index.js';
 import { prepareSave, planChecksums } from '../save.js';
@@ -358,9 +358,9 @@ function revert() {
   if (ready()) edit('Revert', opRevert(state.rawMode ? state.refView.raw : state.refView.phys, state.sel));
 }
 
+// Full precision (not the display decimals), so pasting a copy back changes nothing.
 function selectionTsv() {
-  const d = state.rawMode ? 0 : state.item.z.decimals;
-  return toTsv(gridNow(), state.sel, v => formatValue(v, d));
+  return toTsv(gridNow(), state.sel, copyText);
 }
 
 async function copy() {

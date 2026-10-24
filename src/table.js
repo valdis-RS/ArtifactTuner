@@ -64,6 +64,12 @@ export function formatValue(v, decimals) {
   return v.toFixed(decimals);
 }
 
+// Text for the clipboard: 12 significant digits round-trips every 8/16/32-bit
+// raw and every float32, so a copied block pastes back to the same bytes.
+export function copyText(v) {
+  return Number.isFinite(v) ? String(Number(v.toPrecision(12))) : String(v);
+}
+
 export function formatAxis(axis, v) {
   if (!axis || axis.kind !== 'embedded') return String(v);
   return formatValue(v, axis.elem.decimals);

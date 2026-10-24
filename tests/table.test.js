@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { parseXdf } from '../src/xdf.js';
-import { readItem, planWrites, defaultStep, formatValue, formatAxis, axisValues } from '../src/table.js';
+import { readItem, planWrites, defaultStep, formatValue, formatAxis, axisValues, copyText } from '../src/table.js';
+import { rawRange } from '../src/codec.js';
+import { parseNumber } from '../src/ops.js';
 import { P, APP, ROOT, readText, readBin, tmpFile } from './helpers.js';
 
 const ems = parseXdf(readText(P.ems2kXdf));
@@ -72,4 +74,38 @@ test('steps, axes and formatting', () => {
   assert.equal(formatAxis({ kind: 'labels' }, 'lo'), 'lo');
   assert.equal(formatAxis({ kind: 'index' }, 4), '4');
   assert.equal(formatAxis(ign.y, 3200), '3200');
+});
+
+test('copied text pastes back to the same raw for every writable element kind', () => {
+  const msv = parseXdf(readText(P.msv70Xdf));
+  const seen = new Set(), rawsSeen = new Set();
+  for (const m of [ems, msv]) {
+    for (const it of m.items) {
+      for (const e of [it.z, it.x?.elem, it.y?.elem]) {
+        if (!e || !e.conv.toRaw) continue;
+        const key = `${e.equation}|${e.bits}|${e.signed}|${e.float}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const [lo, hi] = rawRange(e);
+        const n = e.bits <= 16 ? hi - lo : 10000;
+        const rawCheck = !rawsSeen.has(`${lo}|${hi}`);           // raw-mode copies: once per raw range
+        rawsSeen.add(`${lo}|${hi}`);
+        for (let k = 0; k <= n; k++) {
+          const raw = e.bits <= 16 ? lo + k : lo + Math.round(((hi - lo) * k) / n);
+          const text = copyText(e.conv.f(raw));
+          const back = e.conv.toRaw(parseNumber(text)).raw;
+          if (back !== raw) assert.fail(`${key}: raw ${raw} copied as "${text}" pasted back as ${back}`);
+          if (rawCheck && Number.isInteger(raw) && parseNumber(copyText(raw)) !== raw) assert.fail(`${key}: raw ${raw} copied as "${copyText(raw)}"`);
+        }
+      }
+    }
+  }
+  assert.ok(rawsSeen.size >= 4, `only ${rawsSeen.size} raw ranges checked`);
+  assert.ok(seen.size > 50, `only ${seen.size} element kinds checked`);
+  for (const v of [0.1, 16.13, -23.625, 3.4028234663852886e38, 1.401298464324817e-45, 1 / 3]) {
+    const f = Math.fround(v);
+    assert.equal(Math.fround(parseNumber(copyText(f))), f, `float32 ${f}`);
+  }
+  assert.equal(copyText(16.125), '16.125');
+  assert.equal(copyText(NaN), 'NaN');
 });
