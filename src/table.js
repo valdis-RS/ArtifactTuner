@@ -51,6 +51,22 @@ export function diffItem(item, a, b) {
   return cells || axes ? { cells, axes } : null;
 }
 
+// A − B for one item while comparing: per-cell differences in physical (or
+// raw) units, which cells' raw values differ, and the largest |difference|.
+// Unchanged cells read 0.
+export function deltaView(view, refView, raw = false) {
+  const a = raw ? view.raw : view.phys, b = raw ? refView.raw : refView.phys;
+  const changed = view.raw.map((row, r) => row.map((v, c) => !Object.is(v, refView.raw[r][c])));
+  let maxAbs = 0;
+  const cells = a.map((row, r) => row.map((v, c) => {
+    if (!changed[r][c]) return 0;
+    const d = v - b[r][c];
+    if (Number.isFinite(d)) maxAbs = Math.max(maxAbs, Math.abs(d));
+    return d;
+  }));
+  return { cells, changed, maxAbs };
+}
+
 function rawResult(z, lo, hi, value) {
   if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`"${value}" is not a number`);
   const v = z.float ? value : Math.round(value);

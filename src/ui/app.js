@@ -2,7 +2,7 @@
 // undo/redo, saving, and the window.xdfedit test hook.
 import { parseXdf, checkBounds } from '../xdf.js';
 import { BinImage } from '../image.js';
-import { readItem, planWrites, formatValue, formatAxis, defaultStep, copyText } from '../table.js';
+import { readItem, planWrites, formatValue, formatAxis, defaultStep, copyText, deltaView } from '../table.js';
 import { normSel, opSet, opAdd, opScale, opInterpolate, opSmooth, opRevert, opPaste, toTsv, parseNumber, AMBIGUOUS_COMMA } from '../ops.js';
 import { pickPlugin } from '../checksums/index.js';
 import { prepareSave, planChecksums } from '../save.js';
@@ -21,6 +21,7 @@ const state = {
   image: null, pick: null, verified: null, bounds: null, plan: null,
   item: null, view: null, refView: null, sel: null,
   rawMode: false, query: '', modOnly: false, open: new Set(), demo: false,
+  cmpView: 'a',                                   // while comparing: 'a' loaded, 'b' compare file, 'd' A − B
 };
 
 const app = { state, select, edit, refresh, status: setStatus };
@@ -82,6 +83,7 @@ function loadCompare(bytes, name) {
     return false;
   }
   setDiffFilter(true);
+  state.cmpView = 'a';
   refresh();
   const n = state.model ? state.model.items.filter(item => itemDiff(item, state.image)).length : 0;
   setStatus(`Comparing against ${name}: ${n} table${n === 1 ? '' : 's'} differ. Differing cells and axis values are outlined.`);
@@ -141,6 +143,7 @@ function select(item) {
 
 function refresh() {
   const { item, image } = state;
+  if (!image?.referenceName) state.cmpView = 'a';
   const live = Boolean(item && image && !item.disabled);
   state.view = live ? readItem(item, image.working) : null;
   state.refView = live ? readItem(item, image.reference) : null;
@@ -175,14 +178,25 @@ function renderHead() {
   const type = z.float ? `float${order}` : `${z.signed ? 'signed' : 'unsigned'} ${z.bits}-bit${order}`;
   const shape = item.kind === 'constant' ? 'single value' : `${z.rows} × ${z.cols}`;
   // replaceChildren() would turn a null argument into the text "null", so drop the empty slots first.
+  const cmpName = image?.referenceName;
+  const viewBtn = (v, label, title) => h('button', { type: 'button', title, 'aria-pressed': String(state.cmpView === v), onclick: () => setCmpView(v) }, label);
+  const viewNote = !cmpName || state.cmpView === 'a' ? null
+    : state.cmpView === 'b' ? `Showing B: ${cmpName} (read-only). Switch to A to edit.`
+      : `Showing Δ = A − B (${image.name} − ${cmpName}), read-only. Blue: A lower · red: A higher.`;
   el.replaceChildren(...[
     h('div', { class: 'head-row' },
       h('h2', { text: item.title }),
-      h('div', { class: 'seg', role: 'group', 'aria-label': 'Show values as' },
-        h('button', { type: 'button', 'aria-pressed': String(!state.rawMode), onclick: () => setRaw(false) }, 'Physical'),
-        h('button', { type: 'button', 'aria-pressed': String(state.rawMode), onclick: () => setRaw(true) }, 'Raw'))),
+      h('div', { class: 'head-tools' },
+        cmpName ? h('div', { class: 'seg', role: 'group', 'aria-label': 'Compare view' },
+          viewBtn('a', 'A', `A: ${image.name} (loaded, editable)`),
+          viewBtn('b', 'B', `B: ${cmpName} (compare file)`),
+          viewBtn('d', 'Δ A−B', 'Δ: A minus B')) : null,
+        h('div', { class: 'seg', role: 'group', 'aria-label': 'Show values as' },
+          h('button', { type: 'button', 'aria-pressed': String(!state.rawMode), onclick: () => setRaw(false) }, 'Physical'),
+          h('button', { type: 'button', 'aria-pressed': String(state.rawMode), onclick: () => setRaw(true) }, 'Raw')))),
     h('p', { class: 'meta' }, h('code', { text: hex(z.offset, 5) }),
       ` · ${shape} · ${type}` + (z.units ? ` · ${z.units}` : '') + (z.equation !== 'X' ? ` · ${z.equation}` : '')),
+    viewNote ? h('p', { class: 'view-note', text: viewNote }) : null,
     item.desc ? h('p', { class: 'desc', text: item.desc }) : null,
     item.disabled ? h('p', { class: 'warn-text', text: `Disabled: ${item.disabledReason}` })
       : item.readOnly ? h('p', { class: 'warn-text', text: `Read-only: ${item.reason}` }) : null,
@@ -195,8 +209,9 @@ function renderMain() {
   renderHead();
   const ok = Boolean(state.item && state.view);
   $('gridWrap').hidden = !ok;
-  const key = { item: state.item, raw: state.rawMode, ref: state.image?.referenceName, ok };
-  if (key.item !== toolbarFor.item || key.raw !== toolbarFor.raw || key.ref !== toolbarFor.ref || key.ok !== toolbarFor.ok) {
+  const key = { item: state.item, raw: state.rawMode, ref: state.image?.referenceName, ok, cmp: state.cmpView };
+  if (key.item !== toolbarFor.item || key.raw !== toolbarFor.raw || key.ref !== toolbarFor.ref || key.ok !== toolbarFor.ok ||
+      key.cmp !== toolbarFor.cmp) {
     toolbarFor = key;                             // re-render only when it changes, so typed step/percent values survive edits
     renderToolbar(app);
   }
@@ -205,35 +220,55 @@ function renderMain() {
 
 const cam = { ...DEFAULT_CAM, ...prefs.get('cam', {}) };
 
+// The graph follows the compare view: A with B overlaid, B with A overlaid,
+// or the A − B differences (blue lower, red higher).
+function graphData() {
+  const { view, refView, image, item } = state;
+  const A = state.rawMode ? view.raw : view.phys;
+  const B = state.rawMode ? refView.raw : refView.phys;
+  const differs = view.raw.some((row, r) => row.some((v, c) => !Object.is(v, refView.raw[r][c])));
+  const cmpName = image.referenceName;
+  const mode = cmpName ? state.cmpView : 'a';
+  const unit = item.z.units ? ` (${item.z.units})` : '';
+  if (mode === 'd') {
+    return { grid: deltaView(view, refView, state.rawMode).cells, ref: null, axes: view, delta: true,
+      zLabel: `Δ A−B${unit}`, hint: 'Δ = A − B · blue: A lower · red: A higher' };
+  }
+  if (mode === 'b') {
+    return { grid: B, ref: differs ? A : null, axes: refView, delta: false, zLabel: item.z.units,
+      hint: differs ? `teal dashed: A (${image.name})` : '' };
+  }
+  return { grid: A, ref: differs ? B : null, axes: view, delta: false, zLabel: item.z.units,
+    hint: !differs ? '' : cmpName ? `teal dashed: B (${cmpName})` : 'teal dashed: values as loaded' };
+}
+
 function renderGraph() {
   const wrap = $('graphWrap'), canvas = $('graph');
-  const { item, view, refView } = state;
+  const { item, view } = state;
   const show = Boolean(item && view && item.kind === 'table' && view.rows * view.cols > 1);
   wrap.hidden = !show;
   wrap.parentElement.classList.toggle('with-graph', show);
   if (!show) return;
-  const grid = state.rawMode ? view.raw : view.phys;
-  const ref = state.rawMode ? refView.raw : refView.phys;
-  const differs = view.raw.some((row, r) => row.some((v, c) => v !== refView.raw[r][c]));
+  const g = graphData();
   const d = state.rawMode ? 0 : item.z.decimals;
-  const fmtZ = v => formatValue(v, d);
+  const fmtZ = g.delta ? v => (v > 0 ? '+' : '') + formatValue(v, d) : v => formatValue(v, d);
   if (view.rows > 1 && view.cols > 1) {
     canvas.dataset.mode = 'surface';
-    $('graphHint').textContent = 'Drag to rotate · scroll to zoom · double-click to reset' + (differs ? ' · dashed: compare values' : '');
+    $('graphHint').textContent = ['Drag to rotate · scroll to zoom · double-click to reset', g.hint].filter(Boolean).join(' · ');
     drawSurface(canvas, {
-      grid, ref: differs ? ref : null, sel: state.sel, xs: view.xs, ys: view.ys,
+      grid: g.grid, ref: g.ref, sel: state.sel, xs: g.axes.xs, ys: g.axes.ys, diverging: g.delta,
       fmtX: v => formatAxis(item.x, v), fmtY: v => formatAxis(item.y, v), fmtZ,
-      xLabel: item.x.units, yLabel: item.y.units, zLabel: item.z.units,
+      xLabel: item.x.units, yLabel: item.y.units, zLabel: g.zLabel,
     }, cam);
   } else {
     canvas.dataset.mode = 'curve';
     const alongCols = view.rows === 1;
-    const line = g => (alongCols ? g[0] : g.map(row => row[0]));
+    const line = rows => (alongCols ? rows[0] : rows.map(row => row[0]));
     const axis = alongCols ? item.x : item.y;
     const s = state.sel ? normSel(state.sel) : null;
-    $('graphHint').textContent = differs ? 'Dashed line: compare values' : '';
+    $('graphHint').textContent = g.hint;
     drawCurve(canvas, {
-      values: line(grid), ref: differs ? line(ref) : null, xs: alongCols ? view.xs : view.ys,
+      values: line(g.grid), ref: g.ref ? line(g.ref) : null, xs: alongCols ? g.axes.xs : g.axes.ys, zeroLine: g.delta,
       selIdx: s ? (alongCols ? [s.c0, s.c1] : [s.r0, s.r1]) : null,
       fmtX: v => formatAxis(axis, v), fmtY: fmtZ,
     });
@@ -256,6 +291,11 @@ function renderCompareChip() {
   }, '×'));
 }
 
+function setCmpView(v) {
+  state.cmpView = v;
+  refresh();
+}
+
 function setRaw(v) {
   state.rawMode = v;
   prefs.set('raw', v);
@@ -275,6 +315,10 @@ function edit(label, cells) {
   if (!item || !image) return;
   if (item.readOnly || item.disabled) {
     setStatus(`${item.title} can't be edited: ${item.reason || item.disabledReason}`, 'warn');
+    return;
+  }
+  if (image.referenceName && state.cmpView !== 'a') {
+    setStatus('B and Δ are read-only. Switch to A to edit.', 'warn');
     return;
   }
   let res;
@@ -376,9 +420,18 @@ function revert() {
   if (ready()) edit('Revert', opRevert(state.rawMode ? state.refView.raw : state.refView.phys, state.sel));
 }
 
+// The numbers the grid shows: A, B, or A − B while comparing.
+function shownGrid() {
+  const { view, refView } = state;
+  const mode = state.image?.referenceName ? state.cmpView : 'a';
+  if (mode === 'b') return state.rawMode ? refView.raw : refView.phys;
+  if (mode === 'd') return deltaView(view, refView, state.rawMode).cells;
+  return gridNow();
+}
+
 // Full precision (not the display decimals), so pasting a copy back changes nothing.
 function selectionTsv() {
-  return toTsv(gridNow(), state.sel, copyText);
+  return toTsv(shownGrid(), state.sel, copyText);
 }
 
 async function copy() {

@@ -53,6 +53,16 @@ export function drawCurve(canvas, d) {
   g.textBaseline = 'top';
   const every = Math.max(1, Math.ceil(n / Math.max(2, Math.floor((w - m.l - m.r) / 58))));
   for (let i = 0; i < n; i += every) g.fillText(d.fmtX(xs[i] ?? i), X(xv[i]), h - m.b + 8);
+  if (d.zeroLine && y0 <= 0 && y1 >= 0) {                 // differences: mark where A equals B
+    g.save();
+    g.strokeStyle = muted;
+    g.lineWidth = 1.5;
+    g.beginPath();
+    g.moveTo(m.l, Y(0));
+    g.lineTo(w - m.r, Y(0));
+    g.stroke();
+    g.restore();
+  }
 
   const path = (vals, dash, color, width) => {
     g.save();
@@ -64,7 +74,16 @@ export function drawCurve(canvas, d) {
     g.stroke();
     g.restore();
   };
-  if (ref) path(ref, [5, 4], muted, 1.5);
+  if (ref) {
+    const cmp = token('--cmp');
+    path(ref, [6, 4], cmp, 2.2);
+    g.fillStyle = cmp;
+    ref.forEach((v, i) => {
+      g.beginPath();
+      g.arc(X(xv[i]), Y(v), 2.5, 0, Math.PI * 2);
+      g.fill();
+    });
+  }
   path(values, [], accent, 2);
   values.forEach((v, i) => {
     const on = selIdx && i >= selIdx[0] && i <= selIdx[1];

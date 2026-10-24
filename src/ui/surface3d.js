@@ -48,22 +48,26 @@ export function drawSurface(canvas, d, cam) {
   }
   quads.sort((a, b) => b.depth - a.depth);                // farthest first
   const edge = token('--cell-line'), accent = token('--accent'), muted = token('--muted'), fg = token('--fg');
+  // Differences (diverging) are coloured by sign around zero; values by height.
+  const maxAbs = Math.max(Math.abs(lo), Math.abs(hi)) || 1;
+  const shade = v => (d.diverging ? rampRgb(0.5 + v / (2 * maxAbs), 'dplot') : rampRgb((v - lo) / span, 'plot'));
   g.lineWidth = 0.6;
   g.lineJoin = 'round';
   for (const { r, c, pts } of quads) {
     const n = unit(cross(sub(M[r][c + 1], M[r][c]), sub(M[r + 1][c], M[r][c])));
     const lit = 0.7 + 0.3 * Math.abs(dot(n, LIGHT));
-    const t = ((grid[r][c] + grid[r][c + 1] + grid[r + 1][c] + grid[r + 1][c + 1]) / 4 - lo) / span;
+    const avg = (grid[r][c] + grid[r][c + 1] + grid[r + 1][c] + grid[r + 1][c + 1]) / 4;
     g.beginPath();
     pts.forEach((p, i) => (i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)));
     g.closePath();
-    g.fillStyle = css(rampRgb(t, 'plot').map(v => Math.round(v * lit)));
+    g.fillStyle = css(shade(avg).map(v => Math.round(v * lit)));
     g.fill();
     g.strokeStyle = edge;
     g.stroke();
   }
 
   if (ref) {
+    // The other map, drawn on top in its own colour so it stays visible over the surface.
     const R = ref.map((row, r) => row.map((v, c) => project(model(r, c, v))));
     const line = pts => {
       g.beginPath();
@@ -71,11 +75,16 @@ export function drawSurface(canvas, d, cam) {
       g.stroke();
     };
     g.save();
-    g.setLineDash([4, 3]);
-    g.strokeStyle = muted;
-    g.lineWidth = 1;
+    g.setLineDash([6, 3]);
+    g.strokeStyle = g.fillStyle = token('--cmp');
+    g.lineWidth = 1.8;
     R.forEach(line);
     for (let c = 0; c < cols; c++) line(R.map(row => row[c]));
+    for (const p of R.flat()) {
+      g.beginPath();
+      g.arc(p.x, p.y, 1.8, 0, Math.PI * 2);
+      g.fill();
+    }
     g.restore();
   }
 
