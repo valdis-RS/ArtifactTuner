@@ -44,6 +44,15 @@ test('fix(cal) after an edit satisfies checksum.py', () => {
   assert.throws(() => ems2k.fix(img, 'boot'), /never corrected/);
 });
 
+test('the cal-only rule cannot be changed at run time', () => {
+  const img = readBin(P.ekii);
+  assert.throws(() => ems2k.fixable.push('prog'), TypeError);
+  assert.deepEqual(ems2k.fixable, ['cal']);
+  const { fix } = ems2k;
+  assert.throws(() => fix(img, 'prog'), /never corrected/);
+  assert.throws(() => fix.call({ fixable: ['prog'] }, img, 'prog'), /never corrected/);
+});
+
 test('coverage and storedAt', () => {
   const img = readBin(P.ekii);
   const cov = ems2k.coverage(img);

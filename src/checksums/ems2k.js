@@ -5,6 +5,9 @@
 const SIZE = 0x80000;
 const CRC_TABLE = 0x11232;
 const CAL_LO = 0x70000, CAL_HI = 0x7ffff;
+// The only region this tool ever corrects. Frozen and checked directly by fix(),
+// so neither a mutation nor a rebinding of `this` can widen it.
+const FIXABLE = Object.freeze(['cal']);
 
 export function arcTable() {
   const t = new Uint16Array(256);
@@ -63,7 +66,7 @@ function sane(r, lo, hi, max) {
 export const ems2k = {
   id: 'ems2k',
   name: 'Siemens EMS2000 (3 × CRC-16/ARC)',
-  fixable: ['cal'],
+  fixable: FIXABLE,
 
   detect(img) {
     if (img.length !== SIZE) return { ok: false, reason: `not a 512 KB EMS2000 image (${img.length} bytes)` };
@@ -110,7 +113,7 @@ export const ems2k = {
   },
 
   fix(img, region) {
-    if (!this.fixable.includes(region)) throw new Error(`The ${region} checksum is never corrected by this tool`);
+    if (!FIXABLE.includes(region)) throw new Error(`The ${region} checksum is never corrected by this tool`);
     const r = regions(img)[region];
     const v = crc16(img, r.seed, r.ranges);
     img[r.at] = v & 0xff;
