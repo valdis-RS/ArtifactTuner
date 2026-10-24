@@ -21,7 +21,7 @@ const state = {
   image: null, pick: null, verified: null, bounds: null, plan: null,
   item: null, view: null, refView: null, sel: null,
   rawMode: false, query: '', modOnly: false, open: new Set(), demo: false,
-  cmpView: 'a',                                   // while comparing: 'a' loaded, 'b' compare file, 'd' A − B
+  cmpView: 'a',                                   // 'a' loaded, 'b' compare file, 'd' A − B; refresh() keeps it 'a' when not comparing
 };
 
 const app = { state, select, edit, refresh, status: setStatus };
@@ -86,7 +86,7 @@ function loadCompare(bytes, name) {
   state.cmpView = 'a';
   refresh();
   const n = state.model ? state.model.items.filter(item => itemDiff(item, state.image)).length : 0;
-  setStatus(`Comparing against ${name}: ${n} table${n === 1 ? '' : 's'} differ. Differing cells and axis values are outlined.`);
+  setStatus(`Comparing against ${name}: ${n} table${n === 1 ? '' : 's'} differ. Differing cells and axis values are outlined; switch A / B / Δ above a map to see the compare file or the differences.`);
   return true;
 }
 
@@ -228,7 +228,7 @@ function graphData() {
   const B = state.rawMode ? refView.raw : refView.phys;
   const differs = view.raw.some((row, r) => row.some((v, c) => !Object.is(v, refView.raw[r][c])));
   const cmpName = image.referenceName;
-  const mode = cmpName ? state.cmpView : 'a';
+  const mode = state.cmpView;
   const unit = item.z.units ? ` (${item.z.units})` : '';
   if (mode === 'd') {
     return { grid: deltaView(view, refView, state.rawMode).cells, ref: null, axes: view, delta: true,
@@ -268,7 +268,7 @@ function renderGraph() {
     const s = state.sel ? normSel(state.sel) : null;
     $('graphHint').textContent = g.hint;
     drawCurve(canvas, {
-      values: line(g.grid), ref: g.ref ? line(g.ref) : null, xs: alongCols ? g.axes.xs : g.axes.ys, zeroLine: g.delta,
+      values: line(g.grid), ref: g.ref ? line(g.ref) : null, xs: alongCols ? g.axes.xs : g.axes.ys, zeroLine: g.delta, diverging: g.delta,
       selIdx: s ? (alongCols ? [s.c0, s.c1] : [s.r0, s.r1]) : null,
       fmtX: v => formatAxis(axis, v), fmtY: fmtZ,
     });
@@ -310,6 +310,8 @@ function setDrawer(open) {
 
 // ---- editing -------------------------------------------------------------
 
+const READ_ONLY_VIEW = 'B and Δ are read-only. Switch to A to edit.';
+
 function edit(label, cells) {
   const { item, image } = state;
   if (!item || !image) return;
@@ -317,8 +319,8 @@ function edit(label, cells) {
     setStatus(`${item.title} can't be edited: ${item.reason || item.disabledReason}`, 'warn');
     return;
   }
-  if (image.referenceName && state.cmpView !== 'a') {
-    setStatus('B and Δ are read-only. Switch to A to edit.', 'warn');
+  if (state.cmpView !== 'a') {
+    setStatus(READ_ONLY_VIEW, 'warn');
     return;
   }
   let res;
@@ -420,10 +422,10 @@ function revert() {
   if (ready()) edit('Revert', opRevert(state.rawMode ? state.refView.raw : state.refView.phys, state.sel));
 }
 
-// The numbers the grid shows: A, B, or A − B while comparing.
+// The numbers the grid shows: A, B, or A − B while comparing (unchanged Δ cells copy as 0).
 function shownGrid() {
   const { view, refView } = state;
-  const mode = state.image?.referenceName ? state.cmpView : 'a';
+  const mode = state.cmpView;
   if (mode === 'b') return state.rawMode ? refView.raw : refView.phys;
   if (mode === 'd') return deltaView(view, refView, state.rawMode).cells;
   return gridNow();
@@ -445,6 +447,10 @@ async function copy() {
 }
 
 function paste(block) {
+  if (state.cmpView !== 'a') {
+    setStatus(READ_ONLY_VIEW, 'warn');
+    return;
+  }
   const cells = opPaste(gridNow(), state.sel, block);
   if (!cells.length) return;
   edit('Paste', cells);
@@ -453,6 +459,10 @@ function paste(block) {
 }
 
 function beginEntry(first) {
+  if (state.cmpView !== 'a') {
+    setStatus(READ_ONLY_VIEW, 'warn');
+    return;
+  }
   const el = $('valIn');
   if (!el || el.disabled) return;
   el.value = first;

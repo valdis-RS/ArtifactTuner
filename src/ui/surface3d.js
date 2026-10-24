@@ -74,12 +74,18 @@ export function drawSurface(canvas, d, cam) {
       pts.forEach((p, i) => (i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)));
       g.stroke();
     };
+    const mesh = () => {
+      R.forEach(line);
+      for (let c = 0; c < cols; c++) line(R.map(row => row[c]));
+    };
     g.save();
+    g.strokeStyle = token('--surface');                   // a casing so the dashes read against any surface colour
+    g.lineWidth = 3.6;
+    mesh();
     g.setLineDash([6, 3]);
     g.strokeStyle = g.fillStyle = token('--cmp');
     g.lineWidth = 1.8;
-    R.forEach(line);
-    for (let c = 0; c < cols; c++) line(R.map(row => row[c]));
+    mesh();
     for (const p of R.flat()) {
       g.beginPath();
       g.arc(p.x, p.y, 1.8, 0, Math.PI * 2);

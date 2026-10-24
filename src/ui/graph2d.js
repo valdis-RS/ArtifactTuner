@@ -84,12 +84,28 @@ export function drawCurve(canvas, d) {
       g.fill();
     });
   }
-  path(values, [], accent, 2);
+  // Differences are coloured by sign: blue below zero, red above (the height shows the size).
+  const below = token('--dplot-lo'), above = token('--dplot-hi');
+  const signColour = v => (v < 0 ? below : v > 0 ? above : muted);
+  if (d.diverging) {
+    g.save();
+    g.lineWidth = 2.5;
+    for (let i = 1; i < n; i++) {
+      g.strokeStyle = signColour((values[i - 1] + values[i]) / 2);
+      g.beginPath();
+      g.moveTo(X(xv[i - 1]), Y(values[i - 1]));
+      g.lineTo(X(xv[i]), Y(values[i]));
+      g.stroke();
+    }
+    g.restore();
+  } else {
+    path(values, [], accent, 2);
+  }
   values.forEach((v, i) => {
     const on = selIdx && i >= selIdx[0] && i <= selIdx[1];
     g.beginPath();
-    g.arc(X(xv[i]), Y(v), on ? 4.5 : 2.5, 0, Math.PI * 2);
-    g.fillStyle = on ? accent : fg;
+    g.arc(X(xv[i]), Y(v), on ? 4.5 : d.diverging ? 3 : 2.5, 0, Math.PI * 2);
+    g.fillStyle = on ? accent : d.diverging ? signColour(v) : fg;
     g.fill();
   });
 }

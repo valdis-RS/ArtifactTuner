@@ -28,7 +28,7 @@ export function renderGrid(app) {
     return;
   }
   const comparing = Boolean(state.image?.referenceName);
-  const mode = comparing ? state.cmpView : 'a';            // 'a' loaded, 'b' compare file, 'd' A − B
+  const mode = state.cmpView;                               // 'a' loaded, 'b' compare file, 'd' A − B
   const A = state.rawMode ? view.raw : view.phys;
   const B = state.rawMode ? refView.raw : refView.phys;
   const d = state.rawMode ? 0 : item.z.decimals;
