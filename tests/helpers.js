@@ -1,5 +1,6 @@
 // Shared test helpers: paths to the real XDF/BIN files and temp-file writing.
 import fs from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -33,4 +34,19 @@ export function tmpFile(name, bytes) {
   const p = path.join(dir, name);
   fs.writeFileSync(p, bytes);
   return p;
+}
+
+// Runs Mini/mapswitch/checksum.py verify FILE and returns {boot, prog, cal: {calc, stored, ok}}.
+export function pyVerify(file) {
+  let out;
+  try {
+    out = execFileSync('python3', [P.checksumPy, 'verify', file], { encoding: 'utf8' });
+  } catch (err) {
+    out = err.stdout ?? '';                 // exit status 1 means a mismatch, not a failure to run
+  }
+  const res = {};
+  for (const m of out.matchAll(/: (\w+)\s+calc ([0-9A-F]{4}) stored ([0-9A-F]{4})/g)) {
+    res[m[1]] = { calc: parseInt(m[2], 16), stored: parseInt(m[3], 16), ok: m[2] === m[3] };
+  }
+  return res;
 }
