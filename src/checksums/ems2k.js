@@ -35,13 +35,21 @@ export function crc16(img, seed, ranges) {
   return acc;
 }
 
+// Every range is checked against the file, so a corrupted header can never make
+// crc16 read past the end (or loop over billions of addresses).
 export function regions(img) {
   const list = (base, n) => Array.from({ length: n }, (_, k) => [far(img, base + 8 * k), far(img, base + 4 + 8 * k)]);
-  return {
+  const rg = {
     boot: { at: 0x3ed4, seed: w(img, 0x3fe6), ranges: [[far(img, 0x3ed8), far(img, 0x3edc)]] },
     prog: { at: 0x10010, seed: w(img, far(img, 0x10b9c)), ranges: list(0x10014, w(img, 0x10012)) },
     cal: { at: 0x77fe0, seed: w(img, far(img, 0x10bbc)), ranges: list(0x77fe4, img[0x77fe2]) },
   };
+  for (const r of Object.values(rg)) {
+    for (const [s, e] of r.ranges) {
+      if (!(s >= 0 && s <= e && e < img.length)) throw new RangeError('checksum range outside the file');
+    }
+  }
+  return rg;
 }
 
 const inRanges = (ranges, o) => ranges.some(([s, e]) => o >= s && o <= e);
@@ -89,6 +97,11 @@ export const ems2k = {
 
   coverage(img) {
     return Object.fromEntries(Object.entries(regions(img)).map(([name, r]) => [name, r.ranges]));
+  },
+
+  // The full checksum header of each region: {boot|prog|cal: {at, seed, ranges}}.
+  layout(img) {
+    return regions(img);
   },
 
   storedAt(img, region) {

@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ems2k } from '../src/checksums/ems2k.js';
 import { pickPlugin } from '../src/checksums/index.js';
+import { BinImage } from '../src/image.js';
+import { prepareSave, SaveError } from '../src/save.js';
 import { P, readBin, tmpFile, pyVerify } from './helpers.js';
 
 test('verify matches checksum.py on all three EMS2K reads', () => {
@@ -49,4 +51,16 @@ test('coverage and storedAt', () => {
   assert.deepEqual(cov.boot, [[0x0, 0x3d8f]]);
   assert.equal(cov.prog.length, 6);
   assert.deepEqual(ems2k.storedAt(img, 'cal'), [0x77fe0, 0x77fe1]);
+  assert.deepEqual(ems2k.layout(img).cal, { at: 0x77fe0, seed: 0x3046, ranges: cov.cal });
+});
+
+test('a checksum range that points outside the file is refused', () => {
+  const img = readBin(P.ekii);
+  img[0x77fea] = 0xff;                                            // segment word of the first cal range end
+  assert.match(ems2k.detect(img).reason, /outside the file/);
+  assert.throws(() => ems2k.layout(img), RangeError);
+  const im = new BinImage(readBin(P.ekii), 'EKII.bin');
+  im.apply('cal range end segment', [{ off: 0x77fea, before: im.working[0x77fea], after: 0xff }]);
+  assert.throws(() => prepareSave(im, null, pickPlugin(im.original)),
+    err => err instanceof SaveError && /points outside the file/.test(err.message));
 });

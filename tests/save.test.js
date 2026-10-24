@@ -107,3 +107,25 @@ test('an edit that breaks a checksum it could not correct is marked not fixed', 
   assert.equal(res.binName, 'EKII_edit_CHECKSUM-NOT-FIXED.bin');
   assert.match(res.changeLog, /NOT corrected: cal \(edited bytes affect a checksum this tool does not correct\)/);
 });
+
+test('EKII: a cal edit plus a cal range header edit is never corrected', () => {
+  const im = editedImage(P.ekii, 'EKII.bin');
+  im.apply('cal range header', [{ off: 0x77fe4, before: im.working[0x77fe4], after: im.working[0x77fe4] ^ 1 }]);
+  const res = prepareSave(im, ems, pickPlugin(im.original));
+  assert.ok(!res.fixed.includes('cal'), `fixed is ${JSON.stringify(res.fixed)}`);
+  assert.ok(res.notFixed.includes('cal'), `notFixed is ${JSON.stringify(res.notFixed)}`);
+  assert.equal(new Set(res.notFixed).size, res.notFixed.length, 'notFixed has duplicates');
+  assert.equal(res.notCorrected, true);
+  assert.match(res.binName, /_edit_CHECKSUM-NOT-FIXED\.bin$/);
+  assert.deepEqual([res.out[0x77fe0], res.out[0x77fe1]], [im.original[0x77fe0], im.original[0x77fe1]],
+    'the cal CRC was recomputed over the edited range');
+});
+
+test('EKIInonews: an edit to the prog range table is marked not fixed', () => {
+  const im = new BinImage(readBin(P.nonews), 'nonews.bin');
+  im.apply('prog range table', [{ off: 0x10014, before: im.working[0x10014], after: im.working[0x10014] ^ 1 }]);
+  const res = prepareSave(im, ems, pickPlugin(im.original));
+  assert.ok(res.notFixed.includes('prog'), `notFixed is ${JSON.stringify(res.notFixed)}`);
+  assert.equal(res.notCorrected, true);
+  assert.equal(res.binName, 'nonews_edit_CHECKSUM-NOT-FIXED.bin');
+});

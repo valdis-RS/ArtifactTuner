@@ -1,5 +1,5 @@
 // Checksum plugin registry. A plugin is {id, name, fixable, detect, verify,
-// coverage, storedAt, fix}; see checksums/ems2k.js for the reference one.
+// coverage, layout, storedAt, fix}; see checksums/ems2k.js for the reference one.
 import { ems2k } from './ems2k.js';
 
 export const PLUGINS = [ems2k];

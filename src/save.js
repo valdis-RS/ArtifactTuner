@@ -24,17 +24,35 @@ export function prepareSave(image, model, pick, when = new Date()) {
   const { plugin, fixed, notFixed, edited } = planChecksums(image, pick);
   const out = image.working.slice();
   const before = plugin ? plugin.verify(image.original) : null;
+  // The edits may change a checksum's own header (seed, stored offset or ranges).
+  // Such a region is never corrected: fixing it would sum a different range.
+  if (plugin) {
+    let outLayout;
+    try {
+      outLayout = plugin.layout(out);
+    } catch {
+      throw new SaveError('The edits change a checksum header so that it points outside the file. Nothing was saved.');
+    }
+    const origLayout = plugin.layout(image.original);
+    for (const region of Object.keys(origLayout)) {
+      if (JSON.stringify(origLayout[region]) === JSON.stringify(outLayout[region])) continue;
+      if (fixed.includes(region)) fixed.splice(fixed.indexOf(region), 1);
+      if (!notFixed.includes(region)) notFixed.push(region);
+    }
+  }
   for (const region of fixed) plugin.fix(out, region);
   const after = plugin ? plugin.verify(out) : null;
   for (const region of fixed) {
     if (!after[region].ok) throw new SaveError(`The ${region} checksum did not verify after correction. Nothing was saved.`);
   }
-  // An edit can break a checksum without touching its summed ranges (for example
-  // its range header). Any region that verified in the loaded file but fails now,
-  // and was not corrected, is reported as not fixed.
+  // An edit can change a checksum without touching its summed ranges. Any region
+  // that fails now with a different calc or stored value than in the loaded file,
+  // and was not corrected, is reported as not fixed. A region that already
+  // mismatched and is unchanged keeps the same calc and stored, so it stays unmarked.
   if (plugin) {
     for (const [region, r] of Object.entries(after)) {
-      if (before[region].ok && !r.ok && !fixed.includes(region) && !notFixed.includes(region)) notFixed.push(region);
+      if (!r.ok && (r.calc !== before[region].calc || r.stored !== before[region].stored) &&
+        !fixed.includes(region) && !notFixed.includes(region)) notFixed.push(region);
     }
   }
   const allowed = new Set(edited);
