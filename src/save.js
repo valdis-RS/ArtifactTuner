@@ -123,7 +123,7 @@ function changeLog(image, model, res, when) {
     L.push(`Checksums: ${res.plugin.name}`,
       `  loaded file: ${fmtChecks(res.before)}`,
       `  saved file:  ${fmtChecks(res.after)}`,
-      `  corrected: ${res.fixed.join(', ') || 'none needed'}`);
+      `  corrected: ${res.fixed.join(', ') || (res.notFixed.length ? 'none' : 'none needed')}`);
     if (res.notFixed.length) L.push(`  NOT corrected: ${res.notFixed.join(', ')} (edited bytes affect a checksum this tool does not correct)`);
   } else {
     L.push('Checksums: no checksum plugin for this file, so nothing was corrected');

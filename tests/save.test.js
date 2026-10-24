@@ -76,6 +76,7 @@ test('no edits: identical bytes, plain name', () => {
   assert.deepEqual([res.fixed, res.notCorrected, res.binName], [[], false, 'EKII_edit.bin']);
   assert.deepEqual(res.out, im.original);
   assert.match(res.changeLog, /Changed items: 0/);
+  assert.match(res.changeLog, /corrected: none needed/);
 });
 
 test('the self-check aborts on unexpected bytes or a failed correction', () => {
@@ -106,6 +107,7 @@ test('an edit that breaks a checksum it could not correct is marked not fixed', 
   assert.equal(res.notCorrected, true);
   assert.equal(res.binName, 'EKII_edit_CHECKSUM-NOT-FIXED.bin');
   assert.match(res.changeLog, /NOT corrected: cal \(edited bytes affect a checksum this tool does not correct\)/);
+  assert.match(res.changeLog, /\n {2}corrected: none\n/);
 });
 
 test('EKII: a cal edit plus a cal range header edit is never corrected', () => {

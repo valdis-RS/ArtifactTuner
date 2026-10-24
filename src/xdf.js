@@ -29,6 +29,7 @@ function readElem(owner, ctx, shape) {
   const majorStride = numOr(a.mmedmajorstridebits, 0);
   const minorStride = numOr(a.mmedminorstridebits, 0);
   if (majorStride % 8 || minorStride % 8) throw new Unsupported('strides that are not whole bytes');
+  if (majorStride < 0 || minorStride < 0) throw new Unsupported('negative strides');
   const addr = num(a.mmedaddress);
   const offset = ctx.subtract ? addr - ctx.baseOffset : addr + ctx.baseOffset;
   if (!Number.isFinite(offset) || offset < 0) throw new Unsupported(`bad data address "${a.mmedaddress}"`);
@@ -102,7 +103,7 @@ export function parseXdf(text) {
     baseOffset: numOr(base.offset, 0),
     subtract: base.subtract === '1',
     defaultBits: numOr(defs.datasizeinbits, 8),
-    defaultDecimals: numOr(defs.sigdigits, 2),
+    defaultDecimals: Math.max(0, Math.min(10, numOr(defs.sigdigits, 2))),
   };
   const region = childrenOf(head, 'REGION')[0];
   const model = {

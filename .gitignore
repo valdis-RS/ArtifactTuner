@@ -6,3 +6,10 @@ tests/fixtures/*.json
 *.xdf
 *.ori
 .claude/
+*.zip
+*.mod
+*.ols
+*.hex
+*.s19
+*.a2l
+*_changes.txt

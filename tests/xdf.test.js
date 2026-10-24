@@ -113,6 +113,22 @@ test('synthetic XDF: flags, defaults, base offset, labels and unsupported featur
   assert.equal(t('past end').disabled, false);
 });
 
+test('negative strides are skipped and the header default decimals are clamped', () => {
+  const xdf = sig => `<XDFFORMAT version="1.70"><XDFHEADER><deftitle>S</deftitle><DEFAULTS datasizeinbits="8" sigdigits="${sig}" />
+<REGION size="0x40" /></XDFHEADER>
+<XDFCONSTANT uniqueid="0x1"><title>plain</title><EMBEDDEDDATA mmedaddress="0x10" /></XDFCONSTANT>
+<XDFTABLE uniqueid="0x2"><title>backwards rows</title><XDFAXIS id="z"><EMBEDDEDDATA mmedaddress="0x20" mmedrowcount="2" mmedcolcount="2" mmedmajorstridebits="-16" /></XDFAXIS></XDFTABLE>
+<XDFTABLE uniqueid="0x3"><title>backwards cols</title><XDFAXIS id="z"><EMBEDDEDDATA mmedaddress="0x30" mmedrowcount="2" mmedcolcount="2" mmedminorstridebits="-8" /></XDFAXIS></XDFTABLE>
+</XDFFORMAT>`;
+  const m = parseXdf(xdf(40));
+  assert.deepEqual(m.report.skipped, [
+    { title: 'backwards rows', reason: 'negative strides' },
+    { title: 'backwards cols', reason: 'negative strides' },
+  ]);
+  assert.equal(m.items.find(i => i.title === 'plain').z.decimals, 10);
+  assert.equal(parseXdf(xdf(-3)).items[0].z.decimals, 0);
+});
+
 test('MSV70 BIN is shorter than the XDF region but every item fits', () => {
   assert.deepEqual(checkBounds(msv, readBin(P.msv70Bin).length), { sizeMismatch: true, disabled: 0 });
 });
