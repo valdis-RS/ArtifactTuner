@@ -1,0 +1,58 @@
+<title>XDF Map Editor</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/*STYLE*/
+</style>
+<div class="app" id="app">
+  <header class="bar">
+    <button type="button" id="menuBtn" class="btn ghost narrow-only" aria-controls="side" aria-expanded="false">Maps</button>
+    <div class="brand"><span class="brand-mark" aria-hidden="true"></span>XDF Map Editor</div>
+    <div class="files">
+      <label class="btn" for="xdfInput">Open XDF</label>
+      <input type="file" id="xdfInput" accept=".xdf,.xml" hidden>
+      <label class="btn" for="binInput">Open BIN</label>
+      <input type="file" id="binInput" hidden>
+      <label class="btn ghost" for="cmpInput" title="Load another BIN of the same size to compare against">Compare BIN</label>
+      <input type="file" id="cmpInput" hidden>
+      <span id="cmpChip" class="chip" hidden></span>
+    </div>
+    <div id="checks" class="checks" aria-label="Checksums"></div>
+    <div class="actions">
+      <button type="button" id="undoBtn" class="btn ghost" title="Undo (⌘Z)" disabled>Undo</button>
+      <button type="button" id="redoBtn" class="btn ghost" title="Redo (⇧⌘Z)" disabled>Redo</button>
+      <button type="button" id="logBtn" class="btn ghost" title="Save a text list of everything changed" disabled>Change log</button>
+      <button type="button" id="saveBtn" class="btn primary" title="Save the edited BIN (⌘S)" disabled>Save BIN</button>
+    </div>
+  </header>
+  <div id="banner" class="banner" role="alert" hidden></div>
+  <div id="confirm" class="confirm" hidden></div>
+  <div class="body">
+    <aside id="side" class="side" aria-label="Maps">
+      <input type="search" id="search" placeholder="Search name, text or 0x address" aria-label="Search maps" autocomplete="off">
+      <label class="check"><input type="checkbox" id="modOnly"> Modified only</label>
+      <nav id="tree" class="tree" aria-label="Map list"></nav>
+    </aside>
+    <div id="scrim" class="scrim" hidden></div>
+    <main id="main" class="main">
+      <section id="report" class="report" aria-label="Load report" hidden></section>
+      <div id="itemHead" class="item-head"></div>
+      <div id="toolbar" class="toolbar" hidden></div>
+      <div class="work">
+        <div id="gridWrap" class="grid-wrap" hidden><table id="grid" class="grid"></table></div>
+        <figure id="graphWrap" class="graph-wrap" hidden>
+          <canvas id="graph" aria-label="Graph of the selected map"></canvas>
+          <figcaption id="graphHint" class="hint"></figcaption>
+        </figure>
+      </div>
+      <p class="keys narrow-hide">Keys: arrows move · shift extends · type a number or Enter to set · + / − step · ⌘C / ⌘V copy and paste · ⌘Z undo · − steps down; type negative values in the Value box</p>
+    </main>
+  </div>
+  <footer id="status" class="status" role="status" aria-live="polite"></footer>
+  <textarea id="keysink" class="keysink" inputmode="none" aria-label="Map cell keyboard input" autocomplete="off" spellcheck="false"></textarea>
+</div>
+<script>
+/*SCRIPT*/
+</script>
