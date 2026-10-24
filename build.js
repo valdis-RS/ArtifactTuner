@@ -1,6 +1,6 @@
 // Bundles src/ into one HTML page. Each module is wrapped in its own scope;
 // `import { a, b as c } from './x.js'` becomes a destructure of that
-// module's exports. Only that import form and `export function|class|const|let`
+// module's exports. Only that import form and `export function|class|const`
 // are supported.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -16,10 +16,11 @@ export const ORDER = [
 ];
 
 const IMPORT = /^import\s*\{([^}]*)\}\s*from\s*['"]([^'"]+)['"];?[ \t]*$/gm;
-const EXPORT = /^export\s+((?:async\s+)?function\*?|class|const|let)\s+([A-Za-z_$][\w$]*)/gm;
+const EXPORT = /^export\s+((?:async\s+)?function\*?|class|const)\s+([A-Za-z_$][\w$]*)/gm;
 
 export function bundle(srcDir, order) {
   const known = new Set(order);
+  const exportsOf = new Map();
   const parts = [];
   for (const id of order) {
     let code = fs.readFileSync(path.join(srcDir, id), 'utf8');
@@ -31,6 +32,7 @@ export function bundle(srcDir, order) {
       const binds = list.split(',').map(s => s.trim()).filter(Boolean).map(s => {
         const m = /^([\w$]+)(?:\s+as\s+([\w$]+))?$/.exec(s);
         if (!m) throw new Error(`${id}: cannot bundle the import "${s}"`);
+        if (!exportsOf.get(dep).has(m[1])) throw new Error(`${id}: ${dep} does not export ${m[1]}`);
         return m[2] ? `${m[1]}: ${m[2]}` : m[1];
       });
       return `const { ${binds.join(', ')} } = __mods[${JSON.stringify(dep)}];`;
@@ -39,6 +41,7 @@ export function bundle(srcDir, order) {
       names.push(name);
       return `${kind} ${name}`;
     });
+    exportsOf.set(id, new Set(names));
     const left = /^\s*(import|export)\b.*$/m.exec(code);
     if (left) throw new Error(`${id}: unsupported ${left[1]} statement: ${left[0].trim()}`);
     parts.push(`__mods[${JSON.stringify(id)}] = (() => {\n${code}\nreturn { ${names.join(', ')} };\n})();`);

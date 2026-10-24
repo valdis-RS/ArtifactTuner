@@ -20,4 +20,8 @@ test('bundles modules with scoped names, aliases and dependency checks', () => {
   assert.throws(() => bundle(dir, ['d.js']), /unsupported export/);
   fs.writeFileSync(path.join(dir, 'e.js'), "const s = '</script>';\n");
   assert.throws(() => bundle(dir, ['e.js']), /<\/script/);
+  fs.writeFileSync(path.join(dir, 'f.js'), "import { nope } from './a.js';\n");
+  assert.throws(() => bundle(dir, ['a.js', 'f.js']), /a\.js does not export nope/);
+  fs.writeFileSync(path.join(dir, 'g.js'), 'export let n = 1;\n');
+  assert.throws(() => bundle(dir, ['g.js']), /unsupported export/);
 });

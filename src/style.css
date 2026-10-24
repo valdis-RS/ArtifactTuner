@@ -11,6 +11,7 @@
   --accent: #b9650a;
   --accent-fg: #ffffff;
   --sel: rgb(185 101 10 / 0.26);
+  --scrim: rgb(0 0 0 / 0.35);
   --ok: #1e7a4c;
   --bad: #c0352a;
   --warn: #8f5d00;
@@ -36,6 +37,7 @@
     --accent: #efa13a;
     --accent-fg: #1b1205;
     --sel: rgb(239 161 58 / 0.28);
+    --scrim: rgb(0 0 0 / 0.55);
     --ok: #4cc28a;
     --bad: #f0675b;
     --warn: #e6b14f;
@@ -59,6 +61,7 @@
   --accent: #efa13a;
   --accent-fg: #1b1205;
   --sel: rgb(239 161 58 / 0.28);
+  --scrim: rgb(0 0 0 / 0.55);
   --ok: #4cc28a;
   --bad: #f0675b;
   --warn: #e6b14f;
@@ -206,7 +209,7 @@ body.dropping .app { outline: 2px dashed var(--accent); outline-offset: -6px; }
     transform: translateX(-105%); transition: transform 0.2s ease;
   }
   .side.open { transform: none; }
-  .scrim:not([hidden]) { display: block; position: fixed; inset: 0; z-index: 25; background: rgb(0 0 0 / 0.35); }
+  .scrim:not([hidden]) { display: block; position: fixed; inset: 0; z-index: 25; background: var(--scrim); }
   .main { overflow: visible; }
   .grid-wrap { max-height: 62vh; }
 }
