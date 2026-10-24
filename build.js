@@ -12,7 +12,7 @@ export const ORDER = [
   'xml.js', 'math.js', 'codec.js', 'xdf.js', 'table.js', 'image.js', 'ops.js',
   'checksums/ems2k.js', 'checksums/index.js', 'zip.js', 'save.js',
   'ui/dom.js', 'ui/status.js', 'ui/demo.js', 'ui/sidebar.js',
-  'ui/grid.js', 'ui/toolbar.js',
+  'ui/grid.js', 'ui/toolbar.js', 'ui/surface3d.js', 'ui/graph2d.js',
   'ui/app.js',
 ];
 

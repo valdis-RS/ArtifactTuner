@@ -2,8 +2,8 @@
 // undo/redo, saving, and the window.xdfedit test hook.
 import { parseXdf, checkBounds } from '../xdf.js';
 import { BinImage } from '../image.js';
-import { readItem, planWrites, formatValue, defaultStep } from '../table.js';
-import { opSet, opAdd, opScale, opInterpolate, opSmooth, opRevert, opPaste, toTsv, parseNumber } from '../ops.js';
+import { readItem, planWrites, formatValue, formatAxis, defaultStep } from '../table.js';
+import { normSel, opSet, opAdd, opScale, opInterpolate, opSmooth, opRevert, opPaste, toTsv, parseNumber } from '../ops.js';
 import { pickPlugin } from '../checksums/index.js';
 import { prepareSave, planChecksums } from '../save.js';
 import { zip } from '../zip.js';
@@ -12,6 +12,8 @@ import { setStatus, showBanner, hideBanner, askConfirm, renderChecks } from './s
 import { renderTree } from './sidebar.js';
 import { renderGrid, paintSelection, attachGrid } from './grid.js';
 import { renderToolbar } from './toolbar.js';
+import { drawSurface, attachOrbit, DEFAULT_CAM } from './surface3d.js';
+import { drawCurve } from './graph2d.js';
 import { demoFiles } from './demo.js';
 
 const state = {
@@ -192,8 +194,41 @@ function renderMain() {
   renderGrid(app);
 }
 
+const cam = { ...DEFAULT_CAM, ...prefs.get('cam', {}) };
+
 function renderGraph() {
-  $('graphWrap').hidden = true;
+  const wrap = $('graphWrap'), canvas = $('graph');
+  const { item, view, refView } = state;
+  const show = Boolean(item && view && item.kind === 'table' && view.rows * view.cols > 1);
+  wrap.hidden = !show;
+  wrap.parentElement.classList.toggle('with-graph', show);
+  if (!show) return;
+  const grid = state.rawMode ? view.raw : view.phys;
+  const ref = state.rawMode ? refView.raw : refView.phys;
+  const differs = view.raw.some((row, r) => row.some((v, c) => v !== refView.raw[r][c]));
+  const d = state.rawMode ? 0 : item.z.decimals;
+  const fmtZ = v => formatValue(v, d);
+  if (view.rows > 1 && view.cols > 1) {
+    canvas.dataset.mode = 'surface';
+    $('graphHint').textContent = 'Drag to rotate · scroll to zoom · double-click to reset' + (differs ? ' · dashed: compare values' : '');
+    drawSurface(canvas, {
+      grid, ref: differs ? ref : null, sel: state.sel, xs: view.xs, ys: view.ys,
+      fmtX: v => formatAxis(item.x, v), fmtY: v => formatAxis(item.y, v), fmtZ,
+      xLabel: item.x.units, yLabel: item.y.units, zLabel: item.z.units,
+    }, cam);
+  } else {
+    canvas.dataset.mode = 'curve';
+    const alongCols = view.rows === 1;
+    const line = g => (alongCols ? g[0] : g.map(row => row[0]));
+    const axis = alongCols ? item.x : item.y;
+    const s = state.sel ? normSel(state.sel) : null;
+    $('graphHint').textContent = differs ? 'Dashed line: compare values' : '';
+    drawCurve(canvas, {
+      values: line(grid), ref: differs ? line(ref) : null, xs: alongCols ? view.xs : view.ys,
+      selIdx: s ? (alongCols ? [s.c0, s.c1] : [s.r0, s.r1]) : null,
+      fmtX: v => formatAxis(axis, v), fmtY: fmtZ,
+    });
+  }
 }
 
 function renderCompareChip() {
@@ -509,6 +544,11 @@ function wire() {
   $('scrim').addEventListener('click', () => setDrawer(false));
   document.addEventListener('keydown', onKey);
   attachGrid(app);
+  attachOrbit($('graph'), cam, persist => {
+    renderGraph();
+    if (persist) prefs.set('cam', cam);
+  }, () => $('graph').dataset.mode === 'surface');
+  new ResizeObserver(() => renderGraph()).observe($('graphWrap'));
 
   let depth = 0;
   const hasFiles = e => Array.from(e.dataTransfer?.types ?? []).includes('Files');

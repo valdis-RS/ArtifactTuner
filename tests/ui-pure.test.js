@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { demoFiles } from '../src/ui/demo.js';
 import { itemMatches, isModified } from '../src/ui/sidebar.js';
+import { niceTicks } from '../src/ui/graph2d.js';
 import { parseXdf, checkBounds } from '../src/xdf.js';
 import { readItem } from '../src/table.js';
 import { BinImage } from '../src/image.js';
@@ -43,4 +44,11 @@ test('isModified compares the data bytes with the reference', () => {
   im.apply('x', [{ off, before: im.working[off], after: im.working[off] ^ 1 }]);
   assert.equal(isModified(ign, im), true);
   assert.equal(isModified(ign, null), false);
+});
+
+test('niceTicks covers the range with round steps', () => {
+  assert.deepEqual(niceTicks(0, 10), [0, 2, 4, 6, 8, 10]);
+  assert.deepEqual(niceTicks(-23.6, 72), [-40, -20, 0, 20, 40, 60, 80]);
+  assert.deepEqual(niceTicks(0, 1), [0, 0.2, 0.4, 0.6, 0.8, 1]);
+  assert.deepEqual(niceTicks(5, 5), [5, 6]);
 });
