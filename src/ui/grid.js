@@ -6,6 +6,13 @@ import { normSel, parseTsv } from '../ops.js';
 
 const signedFmt = (v, d) => (v > 0 ? '+' : '') + formatValue(v, d);
 
+// An axis header cell, outlined like a changed value when it differs from the reference.
+function axisHead(axis, v, ref, cls, data) {
+  const changed = axis.kind === 'embedded' && !Object.is(v, ref);
+  const tip = changed ? ` title="${esc(`ref ${formatAxis(axis, ref)} → ${formatAxis(axis, v)}`)}"` : '';
+  return `<th class="${cls}${changed ? ' chg' : ''}" ${data}${tip}>${esc(formatAxis(axis, v))}</th>`;
+}
+
 export function renderGrid(app) {
   const { state } = app;
   const { item, view, refView } = state;
@@ -25,13 +32,13 @@ export function renderGrid(app) {
   if (isTable) {
     const corner = `${item.y.units || 'rows'} ↓  ${item.x.units || 'columns'} →`;
     html.push(`<thead><tr><th class="corner" data-all="1" title="${esc(corner)} (click to select all)">${esc(corner)}</th>`);
-    view.xs.forEach((x, c) => html.push(`<th class="xh" data-col="${c}">${esc(formatAxis(item.x, x))}</th>`));
+    view.xs.forEach((x, c) => html.push(axisHead(item.x, x, refView.xs[c], 'xh', `data-col="${c}"`)));
     html.push('</tr></thead>');
   }
   html.push('<tbody>');
   for (let r = 0; r < view.rows; r++) {
     html.push('<tr>');
-    if (isTable) html.push(`<th class="yh" data-row="${r}">${esc(formatAxis(item.y, view.ys[r]))}</th>`);
+    if (isTable) html.push(axisHead(item.y, view.ys[r], refView.ys[r], 'yh', `data-row="${r}"`));
     for (let c = 0; c < view.cols; c++) {
       const v = grid[r][c];
       const changed = view.raw[r][c] !== refView.raw[r][c];

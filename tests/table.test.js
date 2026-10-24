@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { parseXdf } from '../src/xdf.js';
-import { readItem, planWrites, defaultStep, formatValue, formatAxis, axisValues, copyText } from '../src/table.js';
+import { readItem, planWrites, defaultStep, formatValue, formatAxis, axisValues, copyText, diffItem } from '../src/table.js';
 import { rawRange } from '../src/codec.js';
 import { parseNumber } from '../src/ops.js';
 import { P, APP, ROOT, readText, readBin, tmpFile } from './helpers.js';
@@ -15,6 +15,25 @@ execFileSync('python3', [path.join(APP, 'tests', 'fixtures', 'make_fixtures.py')
   { env: { ...process.env, ARTIFACT_TUNER_DATA: ROOT } });
 const fx = JSON.parse(readText(fxPath));
 const itemAt = off => ems.items.find(i => i.z.offset === off);
+
+test('diffItem counts differing cells and notices axis changes', () => {
+  const ign = itemAt(0x75ef2);
+  assert.equal(diffItem(ign, ekii, ekii), null);
+  const b = ekii.slice();
+  b[0x75ef2 + 13] ^= 1;
+  b[0x75ef2 + 40] ^= 1;
+  assert.deepEqual(diffItem(ign, ekii, b), { cells: 2, axes: false });
+  const y = ekii.slice();
+  y[0x74356 + 3] ^= 1;                                   // RPM axis only
+  assert.deepEqual(diffItem(ign, ekii, y), { cells: 0, axes: true });
+  y[0x75ef2] ^= 1;
+  assert.deepEqual(diffItem(ign, ekii, y), { cells: 1, axes: true });
+  const ve = itemAt(0x7c69a);                            // both bytes of one 16-bit cell count once
+  const w = ekii.slice();
+  w[0x7c69a] ^= 1;
+  w[0x7c69a + 1] ^= 1;
+  assert.deepEqual(diffItem(ve, ekii, w), { cells: 1, axes: false });
+});
 
 test('decoded tables match the independent Python read', () => {
   for (const off of [0x75ef2, 0x7c69a]) {
