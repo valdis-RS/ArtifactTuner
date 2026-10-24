@@ -1,16 +1,22 @@
-// The map grid: heat-coloured cells with compare outlines, mouse and
-// keyboard selection, and copy/paste through the hidden key sink.
+// The map grid: heat-coloured cells with compare outlines, the A / B / Δ
+// compare views, mouse and keyboard selection, and copy/paste through the
+// hidden key sink.
 import { $, esc, css, rampRgb } from './dom.js';
-import { formatValue, formatAxis } from '../table.js';
+import { formatValue, formatAxis, deltaView } from '../table.js';
 import { normSel, parseTsv } from '../ops.js';
 
 const signedFmt = (v, d) => (v > 0 ? '+' : '') + formatValue(v, d);
 
-// An axis header cell, outlined like a changed value when it differs from the reference.
-function axisHead(axis, v, ref, cls, data) {
-  const changed = axis.kind === 'embedded' && !Object.is(v, ref);
-  const tip = changed ? ` title="${esc(`ref ${formatAxis(axis, ref)} → ${formatAxis(axis, v)}`)}"` : '';
-  return `<th class="${cls}${changed ? ' chg' : ''}" ${data}${tip}>${esc(formatAxis(axis, v))}</th>`;
+// Tooltip for a value that differs: A/B names while comparing, loaded → now otherwise.
+const diffTip = (comparing, a, b, fmt, delta) => (comparing
+  ? `A ${fmt(a)} · B ${fmt(b)}${delta ? ` · Δ ${delta}` : ''}`
+  : `loaded ${fmt(b)} → now ${fmt(a)}${delta ? ` (Δ ${delta})` : ''}`);
+
+// An axis header cell showing `shown`, outlined when the A and B axis values differ.
+function axisHead(axis, shown, a, b, comparing, cls, data) {
+  const changed = axis.kind === 'embedded' && !Object.is(a, b);
+  const tip = changed ? ` title="${esc(diffTip(comparing, a, b, v => formatAxis(axis, v)))}"` : '';
+  return `<th class="${cls}${changed ? ' chg' : ''}" ${data}${tip}>${esc(formatAxis(axis, shown))}</th>`;
 }
 
 export function renderGrid(app) {
@@ -21,29 +27,39 @@ export function renderGrid(app) {
     table.replaceChildren();
     return;
   }
-  const grid = state.rawMode ? view.raw : view.phys;
-  const ref = state.rawMode ? refView.raw : refView.phys;
+  const comparing = Boolean(state.image?.referenceName);
+  const mode = state.cmpView;                               // 'a' loaded, 'b' compare file, 'd' A − B
+  const A = state.rawMode ? view.raw : view.phys;
+  const B = state.rawMode ? refView.raw : refView.phys;
   const d = state.rawMode ? 0 : item.z.decimals;
+  const fmt = v => formatValue(v, d);
+  const delta = mode === 'd' ? deltaView(view, refView, state.rawMode) : null;
+  const shown = mode === 'b' ? B : A;
+  const axes = mode === 'b' ? refView : view;
   let lo = Infinity, hi = -Infinity;
-  for (const row of grid) for (const v of row) { if (v < lo) lo = v; if (v > hi) hi = v; }
+  for (const row of shown) for (const v of row) { if (v < lo) lo = v; if (v > hi) hi = v; }
   const span = hi - lo || 1;
+  const background = delta
+    ? (r, c) => (delta.changed[r][c] ? css(rampRgb(0.5 + delta.cells[r][c] / (2 * (delta.maxAbs || 1)), 'dheat')) : '')
+    : (r, c) => css(rampRgb((shown[r][c] - lo) / span));
   const isTable = item.kind === 'table';
   const html = [];
   if (isTable) {
     const corner = `${item.y.units || 'rows'} ↓  ${item.x.units || 'columns'} →`;
     html.push(`<thead><tr><th class="corner" data-all="1" title="${esc(corner)} (click to select all)">${esc(corner)}</th>`);
-    view.xs.forEach((x, c) => html.push(axisHead(item.x, x, refView.xs[c], 'xh', `data-col="${c}"`)));
+    axes.xs.forEach((x, c) => html.push(axisHead(item.x, x, view.xs[c], refView.xs[c], comparing, 'xh', `data-col="${c}"`)));
     html.push('</tr></thead>');
   }
   html.push('<tbody>');
   for (let r = 0; r < view.rows; r++) {
-    html.push('<tr>');
-    if (isTable) html.push(axisHead(item.y, view.ys[r], refView.ys[r], 'yh', `data-row="${r}"`));
+    html.push(`<tr${delta ? ' class="delta"' : ''}>`);
+    if (isTable) html.push(axisHead(item.y, axes.ys[r], view.ys[r], refView.ys[r], comparing, 'yh', `data-row="${r}"`));
     for (let c = 0; c < view.cols; c++) {
-      const v = grid[r][c];
       const changed = !Object.is(view.raw[r][c], refView.raw[r][c]);
-      const tip = changed ? ` title="${esc(`ref ${formatValue(ref[r][c], d)} → ${formatValue(v, d)} (Δ ${signedFmt(v - ref[r][c], d)})`)}"` : '';
-      html.push(`<td data-r="${r}" data-c="${c}"${changed ? ' class="chg"' : ''} style="background-color:${css(rampRgb((v - lo) / span))}"${tip}>${formatValue(v, d)}</td>`);
+      const tip = changed ? ` title="${esc(diffTip(comparing, A[r][c], B[r][c], fmt, signedFmt(A[r][c] - B[r][c], d)))}"` : '';
+      const text = delta ? (changed ? signedFmt(delta.cells[r][c], d) : '') : fmt(shown[r][c]);
+      const bg = background(r, c);
+      html.push(`<td data-r="${r}" data-c="${c}"${changed ? ' class="chg"' : ''}${bg ? ` style="background-color:${bg}"` : ''}${tip}>${text}</td>`);
     }
     html.push('</tr>');
   }

@@ -23,7 +23,8 @@ export function renderToolbar(app) {
     return;
   }
   bar.hidden = false;
-  const locked = item.readOnly || item.disabled;
+  const viewOnly = state.cmpView !== 'a';                   // B and Δ views are read-only
+  const locked = item.readOnly || item.disabled || viewOnly;
   const refName = state.image.referenceName || 'the loaded file';
   bar.replaceChildren(
     group('Value',

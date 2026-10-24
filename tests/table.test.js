@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { parseXdf } from '../src/xdf.js';
-import { readItem, planWrites, defaultStep, formatValue, formatAxis, axisValues, copyText, diffItem } from '../src/table.js';
+import { readItem, planWrites, defaultStep, formatValue, formatAxis, axisValues, copyText, diffItem, deltaView } from '../src/table.js';
 import { rawRange } from '../src/codec.js';
 import { parseNumber } from '../src/ops.js';
 import { P, APP, ROOT, readText, readBin, tmpFile } from './helpers.js';
@@ -46,6 +46,25 @@ test('diffItem checks each axis element, not the bytes between strided elements'
   const axis = a.slice();
   axis[2] = 1;
   assert.deepEqual(diffItem(item, a, axis), { cells: 0, axes: true });
+});
+
+test('deltaView gives A − B for changed cells and blanks the rest', () => {
+  const ign = itemAt(0x75ef2);
+  assert.ok(ekii[0x75ef2 + 13] < 250 && ekii[0x75ef2 + 40] > 0, 'test cells must not wrap');
+  const b = ekii.slice();
+  b[0x75ef2 + 13] += 2;                                  // B two raw steps higher at row 1, col 1
+  b[0x75ef2 + 40] -= 1;                                  // B one raw step lower at row 3, col 4
+  const dv = deltaView(readItem(ign, ekii), readItem(ign, b));
+  assert.equal(dv.cells[1][1], -0.75);
+  assert.equal(dv.cells[3][4], 0.375);
+  assert.deepEqual([dv.changed[1][1], dv.changed[3][4], dv.changed[0][0]], [true, true, false]);
+  assert.equal(dv.cells[0][0], 0);
+  assert.equal(dv.maxAbs, 0.75);
+  assert.equal(dv.changed.flat().filter(Boolean).length, 2);
+  const raw = deltaView(readItem(ign, ekii), readItem(ign, b), true);
+  assert.deepEqual([raw.cells[1][1], raw.cells[3][4], raw.maxAbs], [-2, 1, 2]);
+  const same = deltaView(readItem(ign, ekii), readItem(ign, ekii));
+  assert.equal(same.maxAbs, 0);
 });
 
 test('decoded tables match the independent Python read', () => {

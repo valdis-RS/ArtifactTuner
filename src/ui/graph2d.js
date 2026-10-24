@@ -53,6 +53,16 @@ export function drawCurve(canvas, d) {
   g.textBaseline = 'top';
   const every = Math.max(1, Math.ceil(n / Math.max(2, Math.floor((w - m.l - m.r) / 58))));
   for (let i = 0; i < n; i += every) g.fillText(d.fmtX(xs[i] ?? i), X(xv[i]), h - m.b + 8);
+  if (d.zeroLine && y0 <= 0 && y1 >= 0) {                 // differences: mark where A equals B
+    g.save();
+    g.strokeStyle = muted;
+    g.lineWidth = 1.5;
+    g.beginPath();
+    g.moveTo(m.l, Y(0));
+    g.lineTo(w - m.r, Y(0));
+    g.stroke();
+    g.restore();
+  }
 
   const path = (vals, dash, color, width) => {
     g.save();
@@ -64,13 +74,38 @@ export function drawCurve(canvas, d) {
     g.stroke();
     g.restore();
   };
-  if (ref) path(ref, [5, 4], muted, 1.5);
-  path(values, [], accent, 2);
+  if (ref) {
+    const cmp = token('--cmp');
+    path(ref, [6, 4], cmp, 2.2);
+    g.fillStyle = cmp;
+    ref.forEach((v, i) => {
+      g.beginPath();
+      g.arc(X(xv[i]), Y(v), 2.5, 0, Math.PI * 2);
+      g.fill();
+    });
+  }
+  // Differences are coloured by sign: blue below zero, red above (the height shows the size).
+  const below = token('--dplot-lo'), above = token('--dplot-hi');
+  const signColour = v => (v < 0 ? below : v > 0 ? above : muted);
+  if (d.diverging) {
+    g.save();
+    g.lineWidth = 2.5;
+    for (let i = 1; i < n; i++) {
+      g.strokeStyle = signColour((values[i - 1] + values[i]) / 2);
+      g.beginPath();
+      g.moveTo(X(xv[i - 1]), Y(values[i - 1]));
+      g.lineTo(X(xv[i]), Y(values[i]));
+      g.stroke();
+    }
+    g.restore();
+  } else {
+    path(values, [], accent, 2);
+  }
   values.forEach((v, i) => {
     const on = selIdx && i >= selIdx[0] && i <= selIdx[1];
     g.beginPath();
-    g.arc(X(xv[i]), Y(v), on ? 4.5 : 2.5, 0, Math.PI * 2);
-    g.fillStyle = on ? accent : fg;
+    g.arc(X(xv[i]), Y(v), on ? 4.5 : d.diverging ? 3 : 2.5, 0, Math.PI * 2);
+    g.fillStyle = on ? accent : d.diverging ? signColour(v) : fg;
     g.fill();
   });
 }
