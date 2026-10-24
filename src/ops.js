@@ -69,17 +69,23 @@ export function toTsv(grid, sel, fmt = v => String(v)) {
   return lines.join('\n');
 }
 
+export const AMBIGUOUS_COMMA = /^[-+]?[1-9]\d{0,2},\d{3}$/;      // 1,500: thousands or decimal? refuse to guess
+
+// Plain decimal numbers only (no hex, binary or Infinity). A comma decimal such
+// as 1,5 or 0,125 is accepted; the ambiguous thousands form is NaN.
 export function parseNumber(text) {
   let t = String(text ?? '').trim();
+  if (AMBIGUOUS_COMMA.test(t)) return NaN;
   if (/^[-+]?\d+,\d+$/.test(t)) t = t.replace(',', '.');
-  const v = Number(t);
-  return t !== '' && Number.isFinite(v) ? v : NaN;
+  if (!/^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/.test(t)) return NaN;
+  return Number(t);
 }
 
 export function parseTsv(text) {
   const body = text.replace(/\r\n?/g, '\n').replace(/\n+$/, '');
   if (!body.trim()) throw new Error('Nothing to paste');
   return body.split('\n').map(line => line.split('\t').map(cell => {
+    if (AMBIGUOUS_COMMA.test(cell.trim())) throw new Error(`"${cell}" is ambiguous: write 1.5 or 1500`);
     const v = parseNumber(cell);
     if (Number.isNaN(v)) throw new Error(`"${cell}" is not a number`);
     return v;

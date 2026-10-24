@@ -3,7 +3,7 @@
 import { parseXdf, checkBounds } from '../xdf.js';
 import { BinImage } from '../image.js';
 import { readItem, planWrites, formatValue, formatAxis, defaultStep, copyText } from '../table.js';
-import { normSel, opSet, opAdd, opScale, opInterpolate, opSmooth, opRevert, opPaste, toTsv, parseNumber } from '../ops.js';
+import { normSel, opSet, opAdd, opScale, opInterpolate, opSmooth, opRevert, opPaste, toTsv, parseNumber, AMBIGUOUS_COMMA } from '../ops.js';
 import { pickPlugin } from '../checksums/index.js';
 import { prepareSave, planChecksums } from '../save.js';
 import { zip } from '../zip.js';
@@ -315,11 +315,18 @@ function setSel(sel) {
   renderGraph();
 }
 
+// A typed 1,500 could mean 1.5 or 1500, so it is refused with its own message.
+function badNumber(text, fallback) {
+  const t = String(text ?? '').trim();
+  setStatus(AMBIGUOUS_COMMA.test(t) ? `"${t}" is ambiguous: write 1.5 or 1500.` : fallback, 'warn');
+}
+
 function applyValue() {
   if (!ready()) return;
-  const v = parseNumber($('valIn')?.value);
+  const text = $('valIn')?.value;
+  const v = parseNumber(text);
   if (Number.isNaN(v)) {
-    setStatus('Type a number in the Value box first.', 'warn');
+    badNumber(text, 'Type a number in the Value box first.');
     return;
   }
   edit('Set', opSet(gridNow(), state.sel, v));
@@ -336,9 +343,10 @@ function step(dir) {
 
 function scale() {
   if (!ready()) return;
-  const p = parseNumber($('pctIn')?.value);
+  const text = $('pctIn')?.value;
+  const p = parseNumber(text);
   if (Number.isNaN(p)) {
-    setStatus('Type a percentage first.', 'warn');
+    badNumber(text, 'Type a percentage first.');
     return;
   }
   edit(`Scale ${p > 0 ? '+' : ''}${p}%`, opScale(gridNow(), state.sel, p));

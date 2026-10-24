@@ -60,3 +60,18 @@ test('parseNumber and strictlyMonotonic', () => {
   assert.equal(strictlyMonotonic([1, 1, 2]), false);
   assert.equal(strictlyMonotonic([7]), true);
 });
+
+test('parseNumber reads decimals only and refuses the ambiguous thousands form', () => {
+  assert.ok(Number.isNaN(parseNumber('1,500')));
+  assert.ok(Number.isNaN(parseNumber('-1,500')));
+  assert.equal(parseNumber('0,125'), 0.125);
+  assert.equal(parseNumber('1,5'), 1.5);
+  assert.equal(parseNumber('12,5'), 12.5);
+  assert.equal(parseNumber('1e3'), 1000);
+  assert.equal(parseNumber('-.5'), -0.5);
+  assert.ok(Number.isNaN(parseNumber('0x10')));
+  assert.ok(Number.isNaN(parseNumber('0b11')));
+  assert.equal(parseNumber(' 7 '), 7);
+  assert.throws(() => parseTsv('1,500'), /ambiguous/);
+  assert.deepEqual(parseTsv('1\t2,5\r\n-3\t4e1\n'), [[1, 2.5], [-3, 40]]);
+});
