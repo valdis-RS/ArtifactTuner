@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { parseXdf } from '../src/xdf.js';
-import { readItem, planWrites, defaultStep, formatValue, formatAxis, axisValues, copyText } from '../src/table.js';
+import { readItem, planWrites, defaultStep, formatValue, formatAxis, axisValues, copyText, diffItem } from '../src/table.js';
 import { rawRange } from '../src/codec.js';
 import { parseNumber } from '../src/ops.js';
 import { P, APP, ROOT, readText, readBin, tmpFile } from './helpers.js';
@@ -15,6 +15,38 @@ execFileSync('python3', [path.join(APP, 'tests', 'fixtures', 'make_fixtures.py')
   { env: { ...process.env, ARTIFACT_TUNER_DATA: ROOT } });
 const fx = JSON.parse(readText(fxPath));
 const itemAt = off => ems.items.find(i => i.z.offset === off);
+
+test('diffItem counts differing cells and notices axis changes', () => {
+  const ign = itemAt(0x75ef2);
+  assert.equal(diffItem(ign, ekii, ekii), null);
+  const b = ekii.slice();
+  b[0x75ef2 + 13] ^= 1;
+  b[0x75ef2 + 40] ^= 1;
+  assert.deepEqual(diffItem(ign, ekii, b), { cells: 2, axes: false });
+  const y = ekii.slice();
+  y[0x74356 + 3] ^= 1;                                   // RPM axis only
+  assert.deepEqual(diffItem(ign, ekii, y), { cells: 0, axes: true });
+  y[0x75ef2] ^= 1;
+  assert.deepEqual(diffItem(ign, ekii, y), { cells: 1, axes: true });
+  const ve = itemAt(0x7c69a);                            // both bytes of one 16-bit cell count once
+  const w = ekii.slice();
+  w[0x7c69a] ^= 1;
+  w[0x7c69a + 1] ^= 1;
+  assert.deepEqual(diffItem(ve, ekii, w), { cells: 1, axes: false });
+});
+
+test('diffItem checks each axis element, not the bytes between strided elements', () => {
+  const E = o => ({ offset: 0, bits: 8, signed: false, lsbFirst: true, float: false, colMajor: false,
+    rows: 1, cols: 1, majorStride: 0, minorStride: 0, ...o });
+  const item = { z: E({ offset: 4 }), x: { kind: 'embedded', count: 2, elem: E({ cols: 2, minorStride: 16 }) }, y: null };
+  const a = new Uint8Array(8);
+  const gap = a.slice();
+  gap[1] = 9;                                            // between axis elements 0 (byte 0) and 1 (byte 2)
+  assert.equal(diffItem(item, a, gap), null);
+  const axis = a.slice();
+  axis[2] = 1;
+  assert.deepEqual(diffItem(item, a, axis), { cells: 0, axes: true });
+});
 
 test('decoded tables match the independent Python read', () => {
   for (const off of [0x75ef2, 0x7c69a]) {

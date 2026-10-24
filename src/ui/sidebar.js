@@ -1,7 +1,9 @@
-// Map list: XDF categories, search, the "modified only" filter and per-item
-// markers (● modified against the reference, ⚠ read-only or disabled).
+// Map list: XDF categories, search, the "modified only" / "differences only"
+// filter and per-item markers (● modified, Δ differs from the compare file,
+// ⚠ read-only or disabled).
 import { $, h, hex } from './dom.js';
 import { itemSpans } from '../xdf.js';
+import { diffItem } from '../table.js';
 
 const MAX_SHOWN = 500;
 
@@ -15,20 +17,28 @@ export function itemMatches(item, query) {
   return itemSpans(item).some(([s, e]) => want >= s && want < e);
 }
 
-export function isModified(item, image) {
-  if (!image || item.disabled) return false;
-  const [s, e] = itemSpans(item)[0];
-  return image.differsInRange(s, e);
+// {cells, axes} when the item's values or axes differ between the working
+// image and the reference (the compare file, or the loaded original), else null.
+export function itemDiff(item, image) {
+  if (!image || item.disabled) return null;
+  return diffItem(item, image.working, image.reference);
 }
 
-function itemRow(app, item) {
+export function diffLabel({ cells, axes }) {
+  const c = cells ? `${cells} cell${cells === 1 ? '' : 's'}` : '';
+  return [c, axes ? 'axes' : ''].filter(Boolean).join(' + ');
+}
+
+function itemRow(app, item, diff) {
   const { state } = app;
-  const mod = isModified(item, state.image);
+  const comparing = Boolean(state.image?.referenceName);
   const warn = item.readOnly || item.disabled;
   const shape = item.kind === 'constant' ? 'value' : item.z.rows > 1 ? `${item.z.rows}×${item.z.cols}` : String(item.z.cols);
   const tip = [hex(item.z.offset, 5), item.disabled ? `Disabled: ${item.disabledReason}` : '', item.readOnly ? `Read-only: ${item.reason}` : '']
     .filter(Boolean).join(' · ');
   const current = state.item === item;
+  const mark = diff ? (comparing ? 'Δ' : '●') : warn ? '⚠' : '';
+  const note = !diff ? null : comparing ? ` (differs from ${state.image.referenceName})` : ' (modified)';
   return h('li', {},
     h('button', {
       type: 'button',
@@ -37,14 +47,16 @@ function itemRow(app, item) {
       'aria-current': current ? 'true' : false,
       onclick: () => app.select(item),
     },
-    h('span', { class: 'mark' + (warn && !mod ? ' warn' : ''), 'aria-hidden': 'true' }, mod ? '●' : warn ? '⚠' : ''),
-    h('span', { class: 'item-title' }, item.title, mod ? h('span', { class: 'sr' }, ' (modified)') : null),
-    h('span', { class: 'item-meta' }, shape)));
+    h('span', { class: 'mark' + (diff && comparing ? ' diff' : '') + (warn && !diff ? ' warn' : ''), 'aria-hidden': 'true' }, mark),
+    h('span', { class: 'item-title' }, item.title, note ? h('span', { class: 'sr' }, note) : null),
+    h('span', { class: 'item-meta' }, shape, diff && comparing ? h('span', { class: 'diff-note' }, ` · Δ ${diffLabel(diff)}`) : null)));
 }
 
 export function renderTree(app) {
   const { state } = app;
   const tree = $('tree');
+  const compareName = state.image?.referenceName ?? '';
+  $('modOnlyLabel').textContent = compareName ? 'Differences only' : 'Modified only';
   tree.replaceChildren();
   if (!state.model) {
     tree.append(h('p', { class: 'empty' }, 'Open an XDF to list its maps.'));
@@ -52,16 +64,21 @@ export function renderTree(app) {
   }
   const names = new Map(state.model.categories.map(c => [c.id, c.name]));
   const groups = new Map();
+  const diffs = new Map();
   for (const item of state.model.items) {
     if (!itemMatches(item, state.query)) continue;
-    if (state.modOnly && !isModified(item, state.image)) continue;
+    const diff = itemDiff(item, state.image);
+    if (state.modOnly && !diff) continue;
+    diffs.set(item, diff);
     for (const id of item.categoryIds.length ? item.categoryIds : [-1]) {
       if (!groups.has(id)) groups.set(id, []);
       groups.get(id).push(item);
     }
   }
   if (!groups.size) {
-    tree.append(h('p', { class: 'empty' }, state.modOnly ? 'No modified maps yet.' : 'No maps match the search.'));
+    const matching = state.query.trim() ? 'matching ' : '';
+    const none = compareName ? `No ${matching}tables differ from ${compareName}.` : `No ${matching}maps are modified.`;
+    tree.append(h('p', { class: 'empty' }, state.modOnly ? none : 'No maps match the search.'));
     return;
   }
   const filtering = Boolean(state.query.trim()) || state.modOnly;
@@ -70,6 +87,7 @@ export function renderTree(app) {
   for (const id of ids) {
     const items = groups.get(id), key = String(id);
     const open = filtering || state.open.has(key);
+    const differing = compareName ? items.filter(item => diffs.get(item)).length : 0;
     const head = h('button', {
       type: 'button',
       class: 'cat',
@@ -79,14 +97,17 @@ export function renderTree(app) {
         else state.open.add(key);
         renderTree(app);
       },
-    }, h('span', { class: 'cat-name', text: names.get(id) ?? 'Uncategorised' }), h('span', { class: 'count', text: String(items.length) }));
+    },
+    h('span', { class: 'cat-name', text: names.get(id) ?? 'Uncategorised' }),
+    differing ? h('span', { class: 'diff-count', text: `${differing} differ` }) : null,
+    h('span', { class: 'count', text: String(items.length) }));
     const section = h('section', { class: 'group' }, head);
     if (open) {
       const list = h('ul', { class: 'items' });
       for (const item of items) {
         if (shown >= MAX_SHOWN) break;
         shown++;
-        list.append(itemRow(app, item));
+        list.append(itemRow(app, item, diffs.get(item)));
       }
       section.append(list);
     }

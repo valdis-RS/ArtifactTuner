@@ -64,11 +64,6 @@ export class BinImage {
     this.referenceName = '';
   }
 
-  differsInRange(start, end) {
-    for (let i = start; i < end; i++) if (this.working[i] !== this.reference[i]) return true;
-    return false;
-  }
-
   markSaved() {
     this.unsaved = false;
   }

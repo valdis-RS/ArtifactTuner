@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { demoFiles } from '../src/ui/demo.js';
-import { itemMatches, isModified } from '../src/ui/sidebar.js';
+import { itemMatches, itemDiff, diffLabel } from '../src/ui/sidebar.js';
 import { niceTicks } from '../src/ui/graph2d.js';
 import { parseXdf, checkBounds } from '../src/xdf.js';
 import { readItem } from '../src/table.js';
@@ -37,13 +37,30 @@ test('search by title, description and hex address', () => {
   assert.equal(itemMatches(ign, 'lambda'), false);
 });
 
-test('isModified compares the data bytes with the reference', () => {
+test('itemDiff reports edits against the loaded file', () => {
   const im = new BinImage(readBin(P.ekii), 'a.bin');
-  assert.equal(isModified(ign, im), false);
+  assert.equal(itemDiff(ign, im), null);
   const off = 0x75ef2 + 10;
   im.apply('x', [{ off, before: im.working[off], after: im.working[off] ^ 1 }]);
-  assert.equal(isModified(ign, im), true);
-  assert.equal(isModified(ign, null), false);
+  assert.deepEqual(itemDiff(ign, im), { cells: 1, axes: false });
+});
+
+test('itemDiff flags value and axis differences against the compare file', () => {
+  const im = new BinImage(readBin(P.ekii), 'a.bin');
+  assert.equal(itemDiff(ign, im), null);
+  const stock = readBin(P.ekii);
+  stock[0x74356 + 2] ^= 1;                               // the compare file differs only in the RPM axis
+  im.setReference(stock, 'stock.bin');
+  assert.deepEqual(itemDiff(ign, im), { cells: 0, axes: true });
+  assert.equal(itemDiff({ ...ign, disabled: true }, im), null);
+  assert.equal(itemDiff(ign, null), null);
+});
+
+test('diffLabel says what differs', () => {
+  assert.equal(diffLabel({ cells: 1, axes: false }), '1 cell');
+  assert.equal(diffLabel({ cells: 23, axes: false }), '23 cells');
+  assert.equal(diffLabel({ cells: 0, axes: true }), 'axes');
+  assert.equal(diffLabel({ cells: 5, axes: true }), '5 cells + axes');
 });
 
 test('niceTicks covers the range with round steps', () => {

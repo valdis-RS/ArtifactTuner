@@ -25,6 +25,32 @@ export function readItem(item, img) {
   return { rows: z.rows, cols: z.cols, raw, phys, xs: axisValues(item.x, img), ys: axisValues(item.y, img) };
 }
 
+const bytesDiffer = (a, b, start, end) => {
+  for (let i = start; i < end; i++) if (a[i] !== b[i]) return true;
+  return false;
+};
+
+// How one item differs between two images: the number of cells whose bytes
+// differ, and whether any embedded axis differs. Null when nothing differs.
+const cellDiffers = (e, a, b, r, c) => {
+  const off = cellOffset(e, r, c);
+  return bytesDiffer(a, b, off, off + (e.bits >> 3));
+};
+
+export function diffItem(item, a, b) {
+  const z = item.z;
+  let cells = 0;
+  for (let r = 0; r < z.rows; r++) {
+    for (let c = 0; c < z.cols; c++) if (cellDiffers(z, a, b, r, c)) cells++;
+  }
+  const axes = [item.x, item.y].some(ax => {
+    if (ax?.kind !== 'embedded') return false;
+    for (let i = 0; i < ax.count; i++) if (cellDiffers(ax.elem, a, b, 0, i)) return true;
+    return false;
+  });
+  return cells || axes ? { cells, axes } : null;
+}
+
 function rawResult(z, lo, hi, value) {
   if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`"${value}" is not a number`);
   const v = z.float ? value : Math.round(value);

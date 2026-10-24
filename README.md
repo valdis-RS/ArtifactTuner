@@ -7,7 +7,7 @@ View and edit ECU maps in your browser from a TunerPro **XDF** definition and a 
 - Opens TunerPro XDF files: tables (maps and curves) and constants; 8/16/32-bit, signed/unsigned, little/big-endian, 32-bit float, strides, base offset; axes from data, labels or index. Unsupported items (linked axes, multi-variable equations, flags) are listed in a load report and skipped. Items whose equation cannot be inverted are read-only; items that point past the end of the BIN are disabled.
 - Shows each map as a heat-coloured grid with its axes, plus a rotatable 3D surface (maps) or a line graph (curves). Physical or raw values.
 - Edits: set, ± step, × %, interpolate (rows, columns, corners), smooth, revert, copy/paste with Excel or Numbers (a comma decimal such as 1,5 or 0,125 is accepted; a value like 1,500 is refused as ambiguous — type 1.5 or 1500), undo/redo. In the grid, − steps the selection down; type negative values in the Value box.
-- Compares against the loaded file or another BIN of the same size: changed cells are outlined and the map list marks changed maps.
+- Compares against the loaded file or another BIN of the same size: changed cells and axis values are outlined, each category shows how many tables differ, each differing table is marked Δ with what changed (cells and/or axes), and the list shows only differing tables until you untick "Differences only".
 - Saves the edited BIN. In claude.ai the download is a .zip with the BIN and changes.txt; locally the BIN is saved directly and the Change log button saves changes.txt.
 
 ## Checksums
