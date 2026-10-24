@@ -25,7 +25,7 @@ export function drawSurface(canvas, d, cam) {
   }
   const span = hi - lo || 1;
   const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw), cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
-  const scale = Math.min(w, h) * 0.34 * cam.zoom;
+  const scale = Math.min(w, h) * 0.30 * cam.zoom;
   const ox = w / 2, oy = h / 2 + scale * 0.12;
   // Model space: columns on x in [-1, 1], rows on y in [1, -1], value on z in [-0.6, 0.6].
   const xpos = c => (cols > 1 ? (c / (cols - 1)) * 2 - 1 : 0);
@@ -95,7 +95,11 @@ export function drawSurface(canvas, d, cam) {
 
   // Axis end values just outside the floor, axis names further out, value range top-left.
   const at = (x, y) => project([x, y, -0.6]);
-  const put = (p, text) => g.fillText(text, p.x, p.y);
+  const fit = s => (s.length > 28 ? s.slice(0, 27) + '…' : s);
+  const put = (p, text) => {
+    const half = g.measureText(text).width / 2;
+    g.fillText(text, Math.min(w - 4 - half, Math.max(4 + half, p.x)), Math.min(h - 8, Math.max(8, p.y)));
+  };
   g.font = '11px "JetBrains Mono", ui-monospace, Menlo, monospace';
   g.textAlign = 'center';
   g.textBaseline = 'middle';
@@ -105,12 +109,12 @@ export function drawSurface(canvas, d, cam) {
   put(at(-1.2, ypos(0)), d.fmtY(d.ys[0]));
   put(at(-1.2, ypos(rows - 1)), d.fmtY(d.ys[rows - 1]));
   g.fillStyle = fg;
-  if (d.xLabel) put(at(0, -1.42), d.xLabel);
-  if (d.yLabel) put(at(-1.42, 0), d.yLabel);
+  if (d.xLabel) put(at(0, -1.42), fit(d.xLabel));
+  if (d.yLabel) put(at(-1.42, 0), fit(d.yLabel));
   g.textAlign = 'left';
   g.textBaseline = 'top';
   g.fillStyle = muted;
-  g.fillText(`${d.zLabel ? d.zLabel + ': ' : ''}${d.fmtZ(lo)} … ${d.fmtZ(hi)}`, 10, 10);
+  g.fillText(fit(`${d.zLabel ? d.zLabel + ': ' : ''}`) + `${d.fmtZ(lo)} … ${d.fmtZ(hi)}`, 10, 10);
 }
 
 export function attachOrbit(canvas, cam, onChange, enabled) {
