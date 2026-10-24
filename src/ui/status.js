@@ -20,19 +20,28 @@ export function hideBanner() {
   $('banner').hidden = true;
 }
 
+// Focus starts on Cancel, not on the destructive button, and Escape cancels.
 export function askConfirm(text, okLabel) {
   const el = $('confirm');
   return new Promise(resolve => {
+    const onKey = e => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      done(false);
+    };
     const done = v => {
+      el.removeEventListener('keydown', onKey);
       el.hidden = true;
       resolve(v);
     };
+    const cancel = h('button', { type: 'button', class: 'btn', onclick: () => done(false) }, 'Cancel');
     el.replaceChildren(
       h('span', { text }),
       h('button', { type: 'button', class: 'btn danger', onclick: () => done(true) }, okLabel),
-      h('button', { type: 'button', class: 'btn', onclick: () => done(false) }, 'Cancel'));
+      cancel);
+    el.addEventListener('keydown', onKey);
     el.hidden = false;
-    el.querySelector('button').focus();
+    cancel.focus();
   });
 }
 

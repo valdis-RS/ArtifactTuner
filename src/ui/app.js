@@ -457,6 +457,7 @@ async function save() {
     setStatus('Open your own BIN file to save.', 'warn');
     return;
   }
+  hideBanner();
   let res;
   try {
     res = prepareSave(image, model, state.pick);
@@ -465,16 +466,16 @@ async function save() {
     setStatus('Save stopped by the safety check.', 'error');
     return;
   }
-  if (res.notCorrected) {
-    const why = res.plugin ? `edits in the ${res.notFixed.join(', ')} area` : 'no checksum plugin for this file';
-    showBanner(`Checksum NOT corrected (${why}). Correct it in WinOLS or your flashing tool before writing ${res.binName} to an ECU.`, 'error');
-  }
   const { local } = await downloadsCap();
   const name = local ? res.binName : res.zipName;
   const bytes = local ? res.out
     : zip([{ name: res.binName, bytes: res.out }, { name: 'changes.txt', bytes: new TextEncoder().encode(res.changeLog) }]);
-  if (!(await deliverFile(name, bytes))) return;
+  if (!(await deliverFile(name, bytes))) return;     // declined or unavailable: the status line says so, no stale banner
   image.markSaved();
+  if (res.notCorrected) {
+    const why = res.plugin ? `edits in the ${res.notFixed.join(', ')} area` : 'no checksum plugin for this file';
+    showBanner(`Checksum NOT corrected (${why}). Correct it in WinOLS or your flashing tool before writing ${res.binName} to an ECU.`, 'error');
+  }
   const fixedNote = res.fixed.length ? ` with the ${res.fixed.join(', ')} checksum corrected` : '';
   setStatus(`Saved ${name}${fixedNote}.`, res.notCorrected ? 'warn' : 'ok');
 }
