@@ -43,6 +43,10 @@ export function renderGrid(app) {
   html.push('</tbody>');
   table.innerHTML = html.join('');
   table.classList.toggle('single', view.rows * view.cols === 1);
+  // Keep the focused cell clear of the sticky axis headers when it scrolls into view.
+  const wrap = $('gridWrap');
+  wrap.style.scrollPaddingLeft = `${table.querySelector('th.yh')?.offsetWidth ?? 0}px`;
+  wrap.style.scrollPaddingTop = `${table.tHead?.offsetHeight ?? 0}px`;
   paintSelection(app);
 }
 
