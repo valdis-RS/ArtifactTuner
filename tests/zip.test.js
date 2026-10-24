@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { crc32, zip } from '../src/zip.js';
 import { P, readBin, tmpFile } from './helpers.js';
 
@@ -19,6 +22,8 @@ test('python zipfile reads the archive back byte for byte', () => {
     'import sys, zipfile',
     'z = zipfile.ZipFile(sys.argv[1])',
     'assert z.testzip() is None',
+    "assert z.getinfo('a_edit.bin').compress_type == zipfile.ZIP_STORED",
+    "assert z.getinfo('a_edit.bin').flag_bits & 0x800",
     "assert z.namelist() == ['a_edit.bin', 'changes.txt'], z.namelist()",
     "assert z.read('a_edit.bin') == open(sys.argv[2], 'rb').read()",
     "assert z.read('changes.txt').decode() == 'hello \\u00e4nd bye\\n'",
@@ -26,4 +31,14 @@ test('python zipfile reads the archive back byte for byte', () => {
     "print('ok')",
   ].join('\n');
   assert.equal(execFileSync('python3', ['-c', py, zp, ref], { encoding: 'utf8' }).trim(), 'ok');
+});
+
+test('unzip extracts a non-ASCII entry name with a regular file mode', () => {
+  const name = 'Ünïcödé_日本語_edit.bin';
+  const zp = tmpFile('n.zip', zip([{ name, bytes: Uint8Array.from([1, 2, 3, 250]) }]));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'artifact-tuner-unzip-'));
+  execFileSync('unzip', ['-q', zp, '-d', dir]);
+  const out = path.join(dir, name);
+  assert.deepEqual([...fs.readFileSync(out)], [1, 2, 3, 250]);
+  assert.equal(fs.statSync(out).mode & 0o777, 0o644);
 });

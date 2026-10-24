@@ -45,7 +45,7 @@ export function zip(files, when = new Date()) {
     lh.setUint16(28, 0, true);
     const ch = new DataView(new ArrayBuffer(46));
     ch.setUint32(0, 0x02014b50, true);
-    ch.setUint16(4, 20, true);              // version made by
+    ch.setUint16(4, 0x0314, true);          // version made by: Unix, spec 2.0 (so unzip reads names as UTF-8)
     ch.setUint16(6, 20, true);              // version needed
     ch.setUint16(8, 0x0800, true);
     ch.setUint16(10, 0, true);
@@ -55,7 +55,8 @@ export function zip(files, when = new Date()) {
     ch.setUint32(20, size, true);
     ch.setUint32(24, size, true);
     ch.setUint16(28, name.length, true);
-    ch.setUint32(42, offset, true);         // extra, comment, disk and attributes stay 0
+    ch.setUint32(38, (0o100644 << 16) >>> 0, true); // external attributes: regular file, rw-r--r--
+    ch.setUint32(42, offset, true);         // extra, comment, disk and internal attributes stay 0
     locals.push(new Uint8Array(lh.buffer), name, f.bytes);
     centrals.push(new Uint8Array(ch.buffer), name);
     offset += 30 + name.length + size;
