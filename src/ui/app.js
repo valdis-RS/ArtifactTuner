@@ -2,13 +2,16 @@
 // undo/redo, saving, and the window.xdfedit test hook.
 import { parseXdf, checkBounds } from '../xdf.js';
 import { BinImage } from '../image.js';
-import { readItem, planWrites, formatValue } from '../table.js';
+import { readItem, planWrites, formatValue, defaultStep } from '../table.js';
+import { opSet, opAdd, opScale, opInterpolate, opSmooth, opRevert, opPaste, toTsv, parseNumber } from '../ops.js';
 import { pickPlugin } from '../checksums/index.js';
 import { prepareSave, planChecksums } from '../save.js';
 import { zip } from '../zip.js';
 import { $, h, hex, prefs, debounce, resetTheme } from './dom.js';
 import { setStatus, showBanner, hideBanner, askConfirm, renderChecks } from './status.js';
 import { renderTree } from './sidebar.js';
+import { renderGrid, paintSelection, attachGrid } from './grid.js';
+import { renderToolbar } from './toolbar.js';
 import { demoFiles } from './demo.js';
 
 const state = {
@@ -175,10 +178,18 @@ function renderHead() {
   ].filter(Boolean));
 }
 
+let toolbarFor = {};
+
 function renderMain() {
   renderHead();
-  $('gridWrap').hidden = true;
-  $('toolbar').hidden = true;
+  const ok = Boolean(state.item && state.view);
+  $('gridWrap').hidden = !ok;
+  const key = { item: state.item, raw: state.rawMode, ref: state.image?.referenceName, ok };
+  if (key.item !== toolbarFor.item || key.raw !== toolbarFor.raw || key.ref !== toolbarFor.ref || key.ok !== toolbarFor.ok) {
+    toolbarFor = key;                             // re-render only when it changes, so typed step/percent values survive edits
+    renderToolbar(app);
+  }
+  renderGrid(app);
 }
 
 function renderGraph() {
@@ -254,6 +265,103 @@ function redo() {
   refresh();
   setStatus(`Redid: ${g.label}`);
 }
+
+const gridNow = () => (state.rawMode ? state.view.raw : state.view.phys);
+
+function ready() {
+  if (state.view && state.sel) return true;
+  setStatus('Pick a map and select some cells first.', 'warn');
+  return false;
+}
+
+function setSel(sel) {
+  state.sel = sel;
+  paintSelection(app);
+  renderGraph();
+}
+
+function applyValue() {
+  if (!ready()) return;
+  const v = parseNumber($('valIn')?.value);
+  if (Number.isNaN(v)) {
+    setStatus('Type a number in the Value box first.', 'warn');
+    return;
+  }
+  edit('Set', opSet(gridNow(), state.sel, v));
+  $('valIn').value = '';
+  focusGrid();
+}
+
+function step(dir) {
+  if (!ready()) return;
+  const typed = parseNumber($('stepIn')?.value);
+  const size = typed > 0 ? typed : defaultStep(state.item, state.rawMode);
+  edit(dir > 0 ? 'Step up' : 'Step down', opAdd(gridNow(), state.sel, dir * size));
+}
+
+function scale() {
+  if (!ready()) return;
+  const p = parseNumber($('pctIn')?.value);
+  if (Number.isNaN(p)) {
+    setStatus('Type a percentage first.', 'warn');
+    return;
+  }
+  edit(`Scale ${p > 0 ? '+' : ''}${p}%`, opScale(gridNow(), state.sel, p));
+}
+
+function interpolate(mode) {
+  if (!ready()) return;
+  const nums = a => (a.every(v => typeof v === 'number') ? a : null);
+  edit('Interpolate', opInterpolate(gridNow(), state.sel, mode, nums(state.view.xs), nums(state.view.ys)));
+}
+
+function smooth() {
+  if (ready()) edit('Smooth', opSmooth(gridNow(), state.sel));
+}
+
+function revert() {
+  if (ready()) edit('Revert', opRevert(state.rawMode ? state.refView.raw : state.refView.phys, state.sel));
+}
+
+function selectionTsv() {
+  const d = state.rawMode ? 0 : state.item.z.decimals;
+  return toTsv(gridNow(), state.sel, v => formatValue(v, d));
+}
+
+async function copy() {
+  if (!ready()) return;
+  try {
+    await navigator.clipboard.writeText(selectionTsv());
+    setStatus('Copied the selection.');
+  } catch {
+    setStatus('Copying was blocked here. Click the grid and press ⌘C or Ctrl+C instead.', 'warn');
+  }
+}
+
+function paste(block) {
+  const cells = opPaste(gridNow(), state.sel, block);
+  if (!cells.length) return;
+  edit('Paste', cells);
+  const end = cells[cells.length - 1];
+  setSel({ r0: cells[0].r, c0: cells[0].c, r1: end.r, c1: end.c });
+}
+
+function beginEntry(first) {
+  const el = $('valIn');
+  if (!el || el.disabled) return;
+  el.value = first;
+  el.focus();
+  el.setSelectionRange(el.value.length, el.value.length);
+}
+
+function focusGrid() {
+  const sink = $('keysink');
+  sink.value = ' ';                               // a selection must exist for ⌘C to fire a copy event in Safari
+  sink.focus({ preventScroll: true });
+  sink.select();
+}
+
+Object.assign(app, { setSel, step, applyValue, scale, interpolate, smooth, revert, copy, paste, selectionTsv, beginEntry, focusGrid });
 
 // ---- saving --------------------------------------------------------------
 
@@ -400,6 +508,7 @@ function wire() {
   $('menuBtn').addEventListener('click', () => setDrawer(!$('side').classList.contains('open')));
   $('scrim').addEventListener('click', () => setDrawer(false));
   document.addEventListener('keydown', onKey);
+  attachGrid(app);
 
   let depth = 0;
   const hasFiles = e => Array.from(e.dataTransfer?.types ?? []).includes('Files');
