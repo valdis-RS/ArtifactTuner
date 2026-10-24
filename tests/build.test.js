@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { bundle } from '../build.js';
+import { execFileSync } from 'node:child_process';
+import { bundle, build } from '../build.js';
+import { tmpFile } from './helpers.js';
 
 test('bundles modules with scoped names, aliases and dependency checks', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bundle-'));
@@ -24,4 +26,18 @@ test('bundles modules with scoped names, aliases and dependency checks', () => {
   assert.throws(() => bundle(dir, ['a.js', 'f.js']), /a\.js does not export nope/);
   fs.writeFileSync(path.join(dir, 'g.js'), 'export let n = 1;\n');
   assert.throws(() => bundle(dir, ['g.js']), /unsupported export/);
+});
+
+test('the real build writes both pages with a syntactically valid script', () => {
+  const r = build();
+  const page = fs.readFileSync(r.artifact, 'utf8');
+  assert.ok(page.startsWith('<title>XDF Map Editor</title>'));
+  assert.match(page, /<meta name="claude:viewport-fit-sides" content="cover">/);
+  assert.doesNotMatch(page, /\/\*(STYLE|SCRIPT)\*\//);
+  const js = page.slice(page.indexOf('<script>') + '<script>'.length, page.lastIndexOf('</script>'));
+  assert.doesNotMatch(js, /^\s*(import|export)\b/m);
+  execFileSync(process.execPath, ['--check', tmpFile('bundle.js', js)]);
+  const local = fs.readFileSync(r.local, 'utf8');
+  assert.ok(local.startsWith('<!doctype html>'));
+  assert.ok(local.includes(page));
 });
