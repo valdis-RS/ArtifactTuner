@@ -41,7 +41,7 @@ export function renderGrid(app) {
     if (isTable) html.push(axisHead(item.y, view.ys[r], refView.ys[r], 'yh', `data-row="${r}"`));
     for (let c = 0; c < view.cols; c++) {
       const v = grid[r][c];
-      const changed = view.raw[r][c] !== refView.raw[r][c];
+      const changed = !Object.is(view.raw[r][c], refView.raw[r][c]);
       const tip = changed ? ` title="${esc(`ref ${formatValue(ref[r][c], d)} → ${formatValue(v, d)} (Δ ${signedFmt(v - ref[r][c], d)})`)}"` : '';
       html.push(`<td data-r="${r}" data-c="${c}"${changed ? ' class="chg"' : ''} style="background-color:${css(rampRgb((v - lo) / span))}"${tip}>${formatValue(v, d)}</td>`);
     }

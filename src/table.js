@@ -1,6 +1,6 @@
 // Item-level reading and writing: decode a whole table with its axes, and
 // turn physical (or raw) cell values into byte patches.
-import { readRaw, encodeRaw, cellOffset, rawRange, elemSpan } from './codec.js';
+import { readRaw, encodeRaw, cellOffset, rawRange } from './codec.js';
 
 export function axisValues(axis, img) {
   if (!axis) return [];
@@ -32,16 +32,22 @@ const bytesDiffer = (a, b, start, end) => {
 
 // How one item differs between two images: the number of cells whose bytes
 // differ, and whether any embedded axis differs. Null when nothing differs.
+const cellDiffers = (e, a, b, r, c) => {
+  const off = cellOffset(e, r, c);
+  return bytesDiffer(a, b, off, off + (e.bits >> 3));
+};
+
 export function diffItem(item, a, b) {
-  const z = item.z, size = z.bits >> 3;
+  const z = item.z;
   let cells = 0;
   for (let r = 0; r < z.rows; r++) {
-    for (let c = 0; c < z.cols; c++) {
-      const off = cellOffset(z, r, c);
-      if (bytesDiffer(a, b, off, off + size)) cells++;
-    }
+    for (let c = 0; c < z.cols; c++) if (cellDiffers(z, a, b, r, c)) cells++;
   }
-  const axes = [item.x, item.y].some(ax => ax?.kind === 'embedded' && bytesDiffer(a, b, ...elemSpan(ax.elem)));
+  const axes = [item.x, item.y].some(ax => {
+    if (ax?.kind !== 'embedded') return false;
+    for (let i = 0; i < ax.count; i++) if (cellDiffers(ax.elem, a, b, 0, i)) return true;
+    return false;
+  });
   return cells || axes ? { cells, axes } : null;
 }
 

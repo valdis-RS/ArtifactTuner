@@ -24,8 +24,6 @@ export function itemDiff(item, image) {
   return diffItem(item, image.working, image.reference);
 }
 
-export const isModified = (item, image) => Boolean(itemDiff(item, image));
-
 export function diffLabel({ cells, axes }) {
   const c = cells ? `${cells} cell${cells === 1 ? '' : 's'}` : '';
   return [c, axes ? 'axes' : ''].filter(Boolean).join(' + ');
@@ -78,7 +76,8 @@ export function renderTree(app) {
     }
   }
   if (!groups.size) {
-    const none = compareName ? `No tables differ from ${compareName}.` : 'No modified maps yet.';
+    const matching = state.query.trim() ? 'matching ' : '';
+    const none = compareName ? `No ${matching}tables differ from ${compareName}.` : `No ${matching}maps are modified.`;
     tree.append(h('p', { class: 'empty' }, state.modOnly ? none : 'No maps match the search.'));
     return;
   }

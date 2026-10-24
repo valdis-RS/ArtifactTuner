@@ -35,6 +35,19 @@ test('diffItem counts differing cells and notices axis changes', () => {
   assert.deepEqual(diffItem(ve, ekii, w), { cells: 1, axes: false });
 });
 
+test('diffItem checks each axis element, not the bytes between strided elements', () => {
+  const E = o => ({ offset: 0, bits: 8, signed: false, lsbFirst: true, float: false, colMajor: false,
+    rows: 1, cols: 1, majorStride: 0, minorStride: 0, ...o });
+  const item = { z: E({ offset: 4 }), x: { kind: 'embedded', count: 2, elem: E({ cols: 2, minorStride: 16 }) }, y: null };
+  const a = new Uint8Array(8);
+  const gap = a.slice();
+  gap[1] = 9;                                            // between axis elements 0 (byte 0) and 1 (byte 2)
+  assert.equal(diffItem(item, a, gap), null);
+  const axis = a.slice();
+  axis[2] = 1;
+  assert.deepEqual(diffItem(item, a, axis), { cells: 0, axes: true });
+});
+
 test('decoded tables match the independent Python read', () => {
   for (const off of [0x75ef2, 0x7c69a]) {
     const want = fx['0x' + off.toString(16)];

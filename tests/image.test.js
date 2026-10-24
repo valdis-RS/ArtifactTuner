@@ -45,15 +45,16 @@ test('the original is a private copy and never changes', () => {
 
 test('reference compare and size check', () => {
   const im = new BinImage(Uint8Array.from([1, 2, 3]), 'a');
-  assert.equal(im.differsInRange(0, 3), false);
-  im.setReference(Uint8Array.from([1, 0, 3]), 'stock.bin');
+  assert.equal(im.reference, im.original);
+  const stock = Uint8Array.from([1, 0, 3]);
+  im.setReference(stock, 'stock.bin');
+  stock[0] = 9;                                          // the reference is a private copy
   assert.equal(im.referenceName, 'stock.bin');
-  assert.equal(im.differsInRange(0, 1), false);
-  assert.equal(im.differsInRange(1, 2), true);
+  assert.deepEqual([...im.reference], [1, 0, 3]);
   assert.throws(() => im.setReference(new Uint8Array(2), 'x'), /2 bytes but the loaded BIN is 3 bytes/);
   im.clearReference();
   assert.equal(im.referenceName, '');
-  assert.equal(im.differsInRange(0, 3), false);
+  assert.equal(im.reference, im.original);
 });
 
 test('unsaved tracking', () => {

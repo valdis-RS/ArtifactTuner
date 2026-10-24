@@ -9,7 +9,7 @@ import { prepareSave, planChecksums } from '../save.js';
 import { zip } from '../zip.js';
 import { $, h, hex, prefs, debounce, resetTheme } from './dom.js';
 import { setStatus, showBanner, hideBanner, askConfirm, renderChecks } from './status.js';
-import { renderTree } from './sidebar.js';
+import { renderTree, itemDiff } from './sidebar.js';
 import { renderGrid, paintSelection, attachGrid } from './grid.js';
 import { renderToolbar } from './toolbar.js';
 import { drawSurface, attachOrbit, DEFAULT_CAM } from './surface3d.js';
@@ -61,8 +61,8 @@ async function loadBinBytes(bytes, name) {
   if (!state.demo && im?.unsaved && im.changed.size &&
       !(await askConfirm(`Discard the unsaved edits to ${im.name}?`, 'Discard edits'))) return false;
   leaveDemo();
-  if (im?.referenceName) setDiffFilter(false);
   state.image = new BinImage(bytes, name);
+  if (im?.referenceName) setDiffFilter(false);
   state.pick = pickPlugin(state.image.original);
   state.verified = state.pick.plugin ? state.pick.plugin.verify(state.image.original) : null;
   state.bounds = state.model ? checkBounds(state.model, bytes.length) : null;
@@ -83,7 +83,8 @@ function loadCompare(bytes, name) {
   }
   setDiffFilter(true);
   refresh();
-  setStatus(`Comparing against ${name}. Cells that differ are outlined.`);
+  const n = state.model ? state.model.items.filter(item => itemDiff(item, state.image)).length : 0;
+  setStatus(`Comparing against ${name}: ${n} table${n === 1 ? '' : 's'} differ. Differing cells and axis values are outlined.`);
   return true;
 }
 
