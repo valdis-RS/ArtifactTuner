@@ -39,7 +39,7 @@ test('unclosed elements and malformed attributes are errors', () => {
 });
 
 test('real XDFs parse with the expected item counts', () => {
-  for (const [file, tables, consts] of [[P.ems2kXdf, 471, 105], [P.msv70Xdf, 2183, 6086]]) {
+  for (const [file, tables, consts] of [[P.ems2kXdf, 474, 111], [P.msv70Xdf, 2183, 6086]]) {
     const t0 = performance.now();
     const doc = parseXml(readText(file));
     const ms = performance.now() - t0;

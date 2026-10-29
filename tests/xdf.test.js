@@ -9,9 +9,9 @@ const msv = parseXdf(readText(P.msv70Xdf));
 const byTitle = (m, t) => m.items.find(i => i.title === t);
 
 test('item counts, nothing skipped', () => {
-  assert.deepEqual([ems.report.tables, ems.report.constants, ems.report.skipped], [471, 105, []]);
+  assert.deepEqual([ems.report.tables, ems.report.constants, ems.report.skipped], [474, 111, []]);
   assert.deepEqual([msv.report.tables, msv.report.constants, msv.report.skipped], [2183, 6086, []]);
-  assert.equal(ems.items.length, 576);
+  assert.equal(ems.items.length, 585);
 });
 
 test('CATEGORYMEM is 1-based', () => {
