@@ -2,7 +2,7 @@
 // undo/redo, saving, and the window.xdfedit test hook.
 import { parseXdf, checkBounds } from '../xdf.js';
 import { BinImage } from '../image.js';
-import { readItem, planWrites, formatValue, formatAxis, defaultStep, copyText, deltaView } from '../table.js';
+import { readItem, planWrites, formatValue, formatAxis, defaultStep, copyText, deltaView, outsideDiffs } from '../table.js';
 import { normSel, opSet, opAdd, opScale, opInterpolate, opSmooth, opRevert, opPaste, toTsv, parseNumber, AMBIGUOUS_COMMA } from '../ops.js';
 import { pickPlugin } from '../checksums/index.js';
 import { prepareSave, planChecksums } from '../save.js';
@@ -85,8 +85,12 @@ function loadCompare(bytes, name) {
   setDiffFilter(true);
   state.cmpView = 'a';
   refresh();
+  renderReport();
   const n = state.model ? state.model.items.filter(item => itemDiff(item, state.image)).length : 0;
-  setStatus(`Comparing against ${name}: ${n} table${n === 1 ? '' : 's'} differ. Differing cells and axis values are outlined; switch A / B / Δ above a map to see the compare file or the differences.`);
+  const out = state.model ? outsideDiffs(state.model.items, state.image.working, state.image.reference).bytes : 0;
+  const outNote = out ? ` ${out.toLocaleString('en-US')} byte${out === 1 ? '' : 's'} outside the XDF's tables also differ: see the list at the top.` : '';
+  setStatus(`Comparing against ${name}: ${n} table${n === 1 ? '' : 's'} differ. Differing cells and axis values are outlined; switch A / B / Δ above a map to see the compare file or the differences.${outNote}`,
+    out ? 'warn' : 'info');
   return true;
 }
 
@@ -100,7 +104,7 @@ function afterLoad() {
   else if (model && image) setStatus(`Ready: ${model.items.length} items from ${state.xdfName}. Pick a map on the left.`, 'ok');
 }
 
-function renderReport() {
+function renderReport({ reveal = true } = {}) {
   const el = $('report');
   const { model, image, bounds, pick } = state;
   if (!model && !image) {
@@ -128,8 +132,46 @@ function renderReport() {
   }
   if (bounds?.sizeMismatch) lines.push(h('p', { class: 'warn-text', text: `The XDF describes ${n(model.regionSize)} bytes but the BIN has ${n(image.original.length)}.` }));
   if (bounds?.disabled) lines.push(h('p', { class: 'warn-text', text: `${bounds.disabled} item(s) point past the end of the BIN and are disabled.` }));
+  if (model && image?.referenceName) lines.push(...compareReport(model, image));
   el.replaceChildren(h('div', { class: 'report-body' }, lines), h('button', { type: 'button', class: 'link', onclick: () => { el.hidden = true; } }, 'Hide'));
-  el.hidden = false;
+  el.hidden = !reveal && el.hidden;
+}
+
+// What the table list cannot show while comparing: differing bytes that no
+// XDF item covers, and areas one file has erased (0xFF) where the other has data.
+const MAX_RANGES = 200;
+
+function compareReport(model, image) {
+  const n = v => v.toLocaleString('en-US');
+  const out = outsideDiffs(model.items, image.working, image.reference);
+  const names = { a: image.name, b: image.referenceName };
+  const lines = [];
+  for (const side of ['a', 'b']) {
+    const runs = out.erased.filter(r => r.side === side);
+    if (!runs.length) continue;
+    const size = runs.reduce((t, r) => t + r.end - r.start, 0);
+    const other = names[side === 'a' ? 'b' : 'a'];
+    lines.push(h('p', { class: 'warn-text', text: `${names[side]} is blank (all 0xFF) where ${other} has data: ` +
+      runs.map(r => `${hex(r.start, 5)}–${hex(r.end - 1, 5)}`).join(', ') + ` (${n(size)} bytes). ` +
+      'It is probably a partial (calibration-only) file; differences there are not listed.' }));
+  }
+  if (!out.bytes) {
+    lines.push(h('p', { text: `Every other difference from ${image.referenceName} lies inside a table of this XDF.` }));
+    return lines;
+  }
+  const bytesOf = (img, r) => Array.from(img.subarray(r.start, r.end), v => v.toString(16).padStart(2, '0')).join(' ');
+  const row = r => {
+    const where = r.end - r.start === 1 ? hex(r.start, 5) : `${hex(r.start, 5)}–${hex(r.end - 1, 5)}`;
+    const what = r.end - r.start <= 8 ? `${bytesOf(image.working, r)} → ${bytesOf(image.reference, r)}` : `${r.bytes} bytes differ`;
+    return h('li', { text: `${where} · ${what}` });
+  };
+  const shown = out.ranges.slice(0, MAX_RANGES).map(row);
+  if (out.ranges.length > MAX_RANGES) shown.push(h('li', { text: `… and ${n(out.ranges.length - MAX_RANGES)} more places` }));
+  lines.push(h('details', { open: true },
+    h('summary', { class: 'warn-text', text: `${n(out.bytes)} byte${out.bytes === 1 ? '' : 's'} in ${n(out.ranges.length)} place${out.ranges.length === 1 ? '' : 's'} ` +
+      `differ outside every table of this XDF, so no map shows them (A → B):` }),
+    h('ul', {}, shown)));
+  return lines;
 }
 
 // ---- rendering -----------------------------------------------------------
@@ -286,6 +328,7 @@ function renderCompareChip() {
       state.image.clearReference();
       setDiffFilter(false);
       refresh();
+      renderReport({ reveal: false });
       setStatus('Comparing against the loaded file again.');
     },
   }, '×'));

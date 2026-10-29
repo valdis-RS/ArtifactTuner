@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { parseXdf } from '../src/xdf.js';
-import { readItem, planWrites, defaultStep, formatValue, formatAxis, axisValues, copyText, diffItem, deltaView } from '../src/table.js';
+import { parseXdf, itemSpans } from '../src/xdf.js';
+import { readItem, planWrites, defaultStep, formatValue, formatAxis, axisValues, copyText, diffItem, deltaView, outsideDiffs } from '../src/table.js';
 import { rawRange } from '../src/codec.js';
 import { parseNumber } from '../src/ops.js';
 import { P, APP, ROOT, readText, readBin, tmpFile } from './helpers.js';
@@ -33,6 +33,40 @@ test('diffItem counts differing cells and notices axis changes', () => {
   w[0x7c69a] ^= 1;
   w[0x7c69a + 1] ^= 1;
   assert.deepEqual(diffItem(ve, ekii, w), { cells: 1, axes: false });
+});
+
+test('outsideDiffs lists changed bytes that no item covers', () => {
+  assert.deepEqual(outsideDiffs(ems.items, ekii, ekii), { ranges: [], bytes: 0, erased: [] });
+  const free = 0x71100;                                  // unused calibration space, inside no item
+  assert.ok(!ems.items.some(i => itemSpans(i).some(([s, e]) => free >= s && free < e + 64)));
+  const b = ekii.slice();
+  b[0x75ef2 + 13] ^= 1;                                  // inside base ignition: the map shows it
+  b[free] ^= 1;
+  b[free + 3] ^= 1;                                      // 2 equal bytes apart: one place
+  b[free + 40] ^= 1;                                     // far enough to be a second place
+  assert.deepEqual(outsideDiffs(ems.items, ekii, b), {
+    ranges: [{ start: free, end: free + 4, bytes: 2 }, { start: free + 40, end: free + 41, bytes: 1 }],
+    bytes: 3, erased: [],
+  });
+});
+
+test('outsideDiffs sets aside areas erased on one side only', () => {
+  const b = ekii.slice();
+  b.fill(0xff, 0, 0x70000);                              // a calibration-only file: code area blank
+  b[0x71100] ^= 1;
+  const out = outsideDiffs(ems.items, ekii, b);
+  assert.deepEqual(out.ranges, [{ start: 0x71100, end: 0x71101, bytes: 1 }]);
+  assert.equal(out.bytes, 1);
+  assert.ok(out.erased.length >= 1 && out.erased.every(r => r.side === 'b' && r.end <= 0x70000));
+  assert.equal(out.erased[0].start, 0);
+  const flipped = outsideDiffs(ems.items, b, ekii);      // the blank file loaded as A
+  assert.deepEqual(flipped.ranges, out.ranges);
+  assert.ok(flipped.erased.every(r => r.side === 'a'));
+  const short = ekii.slice();
+  short.fill(0xff, 0x40000, 0x40000 + 255);              // under 256 bytes: an ordinary difference
+  const s = outsideDiffs(ems.items, ekii, short);
+  assert.deepEqual(s.erased, []);
+  assert.ok(s.bytes > 0);
 });
 
 test('diffItem checks each axis element, not the bytes between strided elements', () => {
