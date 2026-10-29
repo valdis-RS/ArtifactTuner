@@ -1,6 +1,7 @@
 // Item-level reading and writing: decode a whole table with its axes, and
 // turn physical (or raw) cell values into byte patches.
 import { readRaw, encodeRaw, cellOffset, rawRange } from './codec.js';
+import { itemSpans } from './xdf.js';
 
 export function axisValues(axis, img) {
   if (!axis) return [];
@@ -49,6 +50,48 @@ export function diffItem(item, a, b) {
     return false;
   });
   return cells || axes ? { cells, axes } : null;
+}
+
+// Runs of 256+ erased bytes (0xFF) on side x where the other side has data in
+// at least a quarter of the run: a calibration-only file is blank outside its
+// calibration. A few edits into erased free space do not count.
+const ERASED_MIN = 256;
+
+function erasedRuns(x, y, n, side) {
+  const runs = [];
+  for (let i = 0; i < n;) {
+    if (x[i] !== 0xff) { i++; continue; }
+    let j = i, data = 0;
+    for (; j < n && x[j] === 0xff; j++) if (y[j] !== 0xff) data++;
+    if (j - i >= ERASED_MIN && data * 4 >= j - i) runs.push({ side, start: i, end: j });
+    i = j;
+  }
+  return runs;
+}
+
+// Bytes that differ between a and b but lie in no item: changes the XDF cannot
+// show. Differing bytes up to 8 apart form one range. Areas erased on one side
+// (see erasedRuns) are returned apart and their bytes are not counted.
+export function outsideDiffs(items, a, b) {
+  const n = Math.min(a.length, b.length);
+  const skip = new Uint8Array(n);
+  for (const item of items) for (const [s, e] of itemSpans(item)) skip.fill(1, Math.max(0, s), Math.min(n, e));
+  const erased = [...erasedRuns(a, b, n, 'a'), ...erasedRuns(b, a, n, 'b')].sort((p, q) => p.start - q.start);
+  for (const r of erased) skip.fill(1, r.start, r.end);
+  const ranges = [];
+  let bytes = 0;
+  for (let i = 0; i < n; i++) {
+    if (skip[i] || a[i] === b[i]) continue;
+    bytes++;
+    const last = ranges[ranges.length - 1];
+    if (last && i - last.end < 8) {
+      last.end = i + 1;
+      last.bytes++;
+    } else {
+      ranges.push({ start: i, end: i + 1, bytes: 1 });
+    }
+  }
+  return { ranges, bytes, erased };
 }
 
 // A − B for one item while comparing: per-cell differences in physical (or
